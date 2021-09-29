@@ -12,6 +12,7 @@ You can edit this file as you like.
   , "erl-binary"
   , "erl-kernel"
   , "erl-lists"
+  , "erl-maps"
   , "erl-process"
   , "erl-tuples"
   , "erl-untagged-union"
