@@ -1,0 +1,8 @@
+output/
+testoutput/
+_build/
+_checkouts/
+.spago/
+rebar3.crashdump
+erl_crash.dump
+generated-docs/
