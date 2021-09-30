@@ -55,7 +55,7 @@ describeResp =
           "InstanceId": "i-08ecb111c3d83fac2",
           "InstanceType": "t2.micro",
           "KeyName": "JumpBox",
-          "LaunchTime": "2017-03-07T15:41:05+00:00",
+          "LaunchTime": "2017-03-07T15:41:05+01:00",
           "Monitoring": {
             "State": "disabled"
           },
@@ -192,7 +192,7 @@ describeResp =
           "InstanceId": "i-0561d09728cb9b920",
           "InstanceType": "t2.medium",
           "KeyName": "id3as-pulumi-pubkey-6341432",
-          "LaunchTime": "2021-02-06T06:48:01+00:00",
+          "LaunchTime": "2021-02-06T06:48:01-01:00",
           "Monitoring": {
             "State": "disabled"
           },

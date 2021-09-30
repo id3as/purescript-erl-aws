@@ -51,3 +51,23 @@ in  upstream
     ]
   , version = "2c1f78a3aa6993e91e342a984c522b87b98bbb2b"
   }
+
+  with datetime-parsing =
+    { repo = "https://github.com/flounders/purescript-datetime-parsing"
+    , dependencies =
+            [  "arrays"
+             , "datetime"
+             , "either"
+             , "enums"
+             , "foldable-traversable"
+             , "integers"
+             , "lists"
+             , "maybe"
+             , "numbers"
+             , "parsing"
+             , "prelude"
+             , "psci-support"
+             , "strings"
+            ]
+    , version = "10c0a9aecc60a2a5e8cff35bebe45be4dacaa7f8"
+    }

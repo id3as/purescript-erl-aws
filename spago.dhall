@@ -6,6 +6,7 @@ You can edit this file as you like.
 , dependencies =
   [ "convertable-options"
   , "datetime"
+  , "datetime-parsing"
   , "effect"
   , "either"
   , "erl-atom"
@@ -24,6 +25,7 @@ You can edit this file as you like.
   , "lists"
   , "maybe"
   , "newtype"
+  , "parsing"
   , "partial"
   , "prelude"
   , "record"
