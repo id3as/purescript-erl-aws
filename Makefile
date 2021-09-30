@@ -1,4 +1,4 @@
-.PHONY: all clean test erl cleanspago
+.PHONY: all test erl ci clean cleandist
 
 PS_SRC = src
 TEST_SRC = test
@@ -8,13 +8,15 @@ PS_ERL_FFI = $(shell find ${PS_SRC} -type f -name \*.erl)
 PS_TEST_SOURCEFILES = $(shell find ${TEST_SRC} -type f -name \*.purs)
 PS_TEST_ERL_FFI = $(shell find ${TEST_SRC} -type f -name \*.erl)
 
+
+.DEFAULT_GOAL := erl
+
 all: erl docs
 
 ci: all test
 
 output/.complete: .spago $(PS_SOURCEFILES) $(PS_ERL_FFI)
-	echo Stuff updated, running spago
-	spago build # check the regular spago.dhall is correct, but then build test code
+	spago build
 	touch output/.complete
 
 testoutput/.complete: .spago $(PS_SOURCEFILES) $(PS_ERL_FFI) $(PS_TEST_SOURCEFILES) $(PS_TEST_ERL_FFI)
@@ -26,7 +28,7 @@ testoutput/.complete: .spago $(PS_SOURCEFILES) $(PS_ERL_FFI) $(PS_TEST_SOURCEFIL
 	# End  of workaround -------------------------------------
 	touch testoutput/.complete
 
-docs: $(PS_SOURCEFILES) $(PS_ERL_FFI) output/.complete
+docs: output/.complete
 	mkdir -p docs
 	spago docs --format markdown
 	cp generated-docs/md/Erl.AWS*.md docs
