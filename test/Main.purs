@@ -11,6 +11,7 @@ import Effect.Class (liftEffect)
 import Erl.Aws (describeInstances)
 import Erl.Data.Binary.IOData (fromBinary)
 import Erl.Data.Binary.UTF8 (toBinary)
+import Erl.Data.List (List)
 import Erl.Data.List as List
 import Erl.Data.Tuple (tuple4)
 import Erl.Kernel.Inet (ConnectAddress(..), HostAddress(..), IpAddress(..), SocketActive(..), SocketAddress(..), ActiveError(..))
@@ -20,17 +21,15 @@ import Erl.Kernel.Udp (UdpMessage(..))
 import Erl.Kernel.Udp as Udp
 import Erl.Process (Process, ProcessM, receive, spawnLink, unsafeRunProcessM, (!))
 import Erl.Process.Class (self)
-import Erl.Test.EUnit (TestF, runTests, suite, test)
+import Erl.Test.EUnit (TestF, TestSet, collectTests, suite, test)
 import Erl.Types (Timeout(..))
 import Erl.Untagged.Union (class RuntimeType, type (|$|), type (|+|), Nil, RTLiteralAtom, RTOption, RTTuple1, Union, inj, prj)
 import Partial.Unsafe (unsafeCrashWith)
 import Test.Assert (assertEqual, assertTrue)
 
-main :: Effect Unit
-main =
-  void
-    $ runTests do
-        describeTests
+main_test_ :: List TestSet
+main_test_ =
+  collectTests describeTests
 
 describeTests :: Free TestF Unit
 describeTests = do
