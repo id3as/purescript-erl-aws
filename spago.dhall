@@ -4,9 +4,11 @@ You can edit this file as you like.
 -}
 { name = "erl-kernel"
 , dependencies =
-  [ "convertable-options"
+  [ "bifunctors"
+  , "convertable-options"
   , "datetime"
   , "datetime-parsing"
+  , "debug"
   , "effect"
   , "either"
   , "erl-atom"

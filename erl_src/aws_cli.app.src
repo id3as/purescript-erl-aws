@@ -1,12 +1,11 @@
-{application, aws_test,
+{application, aws_cli,
  [ {description, "tests for aws library"}
- , {vsn, "aws_test"}
+ , {vsn, "0.1"}
  , {registered, []}
  , {modules, []}
  , {applications, [ kernel
                   , stdlib
                   , jsx
                   ]}
- , {mod, {aws_test_app, []}}
  , {env, []}
  ]}.
