@@ -15,36 +15,27 @@ module Erl.Aws
   ) where
 
 import Prelude
-import Control.Monad.Except (ExceptT(..), except, runExcept, runExceptT)
+import Control.Monad.Except (except, runExcept)
 import Data.Bifunctor (bimap)
-import Data.DateTime (DateTime(..))
+import Data.DateTime (DateTime)
 import Data.DateTime.Parsing (parseFullDateTime, toUTC)
-import Data.Either (Either(..), fromRight, note)
+import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Generic.Rep (class Generic)
-import Data.Identity (Identity(..))
-import Data.List.NonEmpty (NonEmptyList(..), singleton)
+import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
-import Data.Set (fromMap)
 import Data.Show.Generic (genericShow)
-import Data.String.Regex.Flags (dotAll)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Debug (spy, traceM)
 import Effect (Effect)
-import Erl.Data.Binary.UTF8 (toBinary)
 import Erl.Data.List (List)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
-import Erl.Kernel.File (FileName(..), readFile)
-import Erl.Kernel.Inet (Hostname)
-import Erl.Kernel.Os as Os
-import Foreign (F, Foreign, ForeignError(..), MultipleErrors, readString)
-import Simple.JSON (class ReadForeign, class WriteForeign, E, readImpl, readJSON, readJSON', writeJSON)
+import Foreign (F, ForeignError(..), MultipleErrors, readString)
+import Simple.JSON (class ReadForeign, class WriteForeign, E, readJSON', writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
-import Unsafe.Coerce (unsafeCoerce)
 
 newtype InstanceId
   = InstanceId String
