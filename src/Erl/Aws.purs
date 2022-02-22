@@ -408,10 +408,10 @@ type StopInstancesRequestInt
     }
 
 type StopInstancesResponseInt
-  = { "TerminatingInstances" :: List InstanceStateChangeInt
+  = { "StoppingInstances" :: List InstanceStateChangeInt
     }
 
-stopInstances :: StopInstancesRequest -> Effect (E String)
+stopInstances :: StopInstancesRequest -> Effect (E (List InstanceId))
 stopInstances
   req@
     { instanceIds
@@ -428,11 +428,11 @@ stopInstances
         <> requestJson
         <> "'"
   outputJson <- runAwsCli cli
-  pure $ runExcept outputJson
--- let
---   response :: F StopInstancesResponseInt
---   response = readJSON' outputJson
--- pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."TerminatingInstances") <$> response
+  let
+    response :: F StopInstancesResponseInt
+    response = readJSON' =<< outputJson
+  pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."StoppingInstances") <$> response
+
 awsCliBase :: forall t. BaseRequest t -> String -> String
 awsCliBase { profile, region } command = do
   "aws ec2 "

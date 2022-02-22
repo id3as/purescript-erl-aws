@@ -5,7 +5,7 @@ in upstream
   with simple-json.version = "86d33a1031a312cdc5247d37e167573a9e82992a"
   with simple-json.repo = "https://github.com/id3as/purescript-simple-json.git"
   with erl-simplebus.version = "1a2977d92c65b8c3c99ee2ac79420a16f609de7e"
-  with erl-kernel.version = "592a809b40a125cfb702ca1163d723c0be2c21e0"
+  with erl-kernel.version = "f93533a79fa4cc04d90985b6aca18c8a84909d98"
   with erl-simplebus.version = "0b88c5686d6218a5619416e1550d6809b1b3670d"
   with erl-pinto.version = "55ded43bf38904706fae8978c230713de9c6062f"
 
