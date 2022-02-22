@@ -292,8 +292,8 @@ describeInstances req@{ instanceIds } = do
         <> " --cli-input-json '"
         <> requestJson
         <> "'"
-  outputJson <- Os.cmd cli
-  pure $ runExcept $ (fromDescribeInstancesInt =<< readJSON' outputJson)
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromDescribeInstancesInt =<< readJSON' =<< outputJson
 
 type RunInstancesRequest
   = BaseRequest ( clientToken :: ClientToken
@@ -371,8 +371,8 @@ runInstances
         <> " --cli-input-json '"
         <> requestJson
         <> "'"
-  outputJson <- Os.cmd cli
-  pure $ runExcept $ (fromRunInstancesResponseInt =<< readJSON' outputJson)
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromRunInstancesResponseInt =<< readJSON' =<< outputJson
 
 type TerminateInstancesRequest
   = BaseRequest ( instanceIds :: List InstanceId
@@ -402,10 +402,10 @@ terminateInstances
         <> " --cli-input-json '"
         <> requestJson
         <> "'"
-  outputJson <- Os.cmd cli
+  outputJson <- runAwsCli cli
   let
     response :: F TerminateInstancesResponseInt
-    response = readJSON' outputJson
+    response = readJSON' =<< outputJson
   pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."TerminatingInstances") <$> response
 
 type StopInstancesRequest
@@ -420,7 +420,7 @@ type StopInstancesResponseInt
   = { "TerminatingInstances" :: List InstanceStateChangeInt
     }
 
-stopInstances :: StopInstancesRequest -> Effect (Either MultipleErrors String)
+stopInstances :: StopInstancesRequest -> Effect (E String)
 stopInstances
   req@
     { instanceIds
@@ -436,8 +436,8 @@ stopInstances
         <> " --cli-input-json '"
         <> requestJson
         <> "'"
-  outputJson <- Os.cmd cli
-  pure $ Right outputJson
+  outputJson <- runAwsCli cli
+  pure $ runExcept outputJson
 -- let
 --   response :: F StopInstancesResponseInt
 --   response = readJSON' outputJson
@@ -449,3 +449,17 @@ awsCliBase { profile, region } command = do
     <> " --output json --color off "
     <> (fromMaybe "" $ (\r -> " --region " <> r) <$> unwrap <$> region)
     <> (fromMaybe "" $ (\p -> " --profile " <> p) <$> profile)
+
+runAwsCli :: String -> Effect (F String)
+runAwsCli cmd = do
+  res <- runCommand cmd
+  case res of
+    Left { output } -> pure $ except $ Left $ singleton $ ForeignError $ "aws cli failure: " <> output
+    Right output -> pure $ except $ Right output
+
+type CmdError
+  = { exitStatus :: Number
+    , output :: String
+    }
+
+foreign import runCommand :: String -> Effect (Either CmdError String)
