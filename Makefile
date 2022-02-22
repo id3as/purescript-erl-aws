@@ -46,6 +46,8 @@ test: testoutput/.complete
 	# erl -pa ebin -pa _build/test/lib/*/ebin -noshell -eval '(test_main@ps:main())()' -eval 'init:stop()'
 	ERL_FLAGS="-config $(PROJECT_ROOT)/test/config/sys.config" rebar3 as test eunit -m "test_main@ps" -v
 
+shell: output/.complete
+	rebar3 as dist shell
 
 clean:
 	rebar3 as dist clean

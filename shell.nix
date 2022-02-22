@@ -82,6 +82,9 @@ mkShell {
     # More formatting
     nodePackages.prettier
     pose
+
+    # Kind of essential
+    awscli2
   ];
   shellHook =
     '' 

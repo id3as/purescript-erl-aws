@@ -1,56 +1,13 @@
 let upstream =
-      https://github.com/purerl/package-sets/releases/download/erl-0.14.3-20210709/packages.dhall sha256:9b07e1fe89050620e2ad7f7623d409f19b5e571f43c2bdb61242377f7b89d941
+      https://github.com/purerl/package-sets/releases/download/erl-0.14.5-20220204-2/packages.dhall sha256:bf284d597ad053b43591b964a52aa0f41ed12a576c3efde85ba999ad65072fc9
 
-in  upstream
- with convertable-options =
-        { repo = "https://github.com/natefaubion/purescript-convertable-options"
-        , dependencies = [ "effect", "maybe", "record" ]
-        , version = "f20235d464e8767c469c3804cf6bec4501f970e6"
-        }
- with erl-untagged-union =
-        { repo = "https://github.com/id3as/purescript-erl-untagged-union.git"
-        , dependencies =
-        [ "erl-atom"
-        , "erl-binary"
-        , "erl-lists"
-        , "erl-tuples"
-        , "debug"
-        , "foreign"
-        , "typelevel-prelude"
-        , "maybe"
-        , "partial"
-        , "prelude"
-        , "unsafe-coerce"
-        ]
-        ,   version = "eb7a10c7930c4b99f1a6bfce767daa814d45dd2b"
-        }
- with erl-kernel =
-  { repo = "https://github.com/id3as/purescript-erl-kernel"
-  , dependencies =
-    [ "convertable-options"
-    , "datetime"
-    , "effect"
-    , "either"
-    , "erl-atom"
-    , "erl-binary"
-    , "erl-lists"
-    , "erl-process"
-    , "erl-tuples"
-    , "erl-untagged-union"
-    , "foldable-traversable"
-    , "foreign"
-    , "functions"
-    , "integers"
-    , "maybe"
-    , "newtype"
-    , "partial"
-    , "prelude"
-    , "record"
-    , "typelevel-prelude"
-    , "unsafe-coerce"
-    ]
-  , version = "2c1f78a3aa6993e91e342a984c522b87b98bbb2b"
-  }
+in upstream
+  with simple-json.version = "86d33a1031a312cdc5247d37e167573a9e82992a"
+  with simple-json.repo = "https://github.com/id3as/purescript-simple-json.git"
+  with erl-simplebus.version = "1a2977d92c65b8c3c99ee2ac79420a16f609de7e"
+  with erl-kernel.version = "592a809b40a125cfb702ca1163d723c0be2c21e0"
+  with erl-simplebus.version = "0b88c5686d6218a5619416e1550d6809b1b3670d"
+  with erl-pinto.version = "55ded43bf38904706fae8978c230713de9c6062f"
 
   with datetime-parsing =
     { repo = "https://github.com/flounders/purescript-datetime-parsing"
