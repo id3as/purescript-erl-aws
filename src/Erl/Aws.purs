@@ -1,5 +1,6 @@
 module Erl.Aws
   ( ClientToken(..)
+  , IamRole(..)
   , ImageId(..)
   , InstanceDescription(..)
   , InstanceId(..)
@@ -28,6 +29,7 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
+import Debug (traceM)
 import Effect (Effect)
 import Erl.Data.List (List)
 import Erl.Data.List as List
@@ -252,6 +254,7 @@ stateIntToInstanceState { "Name": unknown } _ =
 type BaseRequest a
   = { region :: Maybe Region
     , profile :: Maybe String
+    , dryRun :: Boolean
     | a
     }
 
@@ -286,6 +289,14 @@ describeInstances req@{ instanceIds } = do
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromDescribeInstancesInt =<< readJSON' =<< outputJson
 
+data IamRole
+  = RoleArn String
+  | RoleName String
+
+iamProfileToInt :: IamRole -> IamInstanceProfileSpecificationInt
+iamProfileToInt (RoleArn arn) = { "Arn": Just arn, "Name": Nothing }
+iamProfileToInt (RoleName name) = { "Arn": Nothing, "Name": Just name }
+
 type RunInstancesRequest
   = BaseRequest ( clientToken :: ClientToken
     , ebsOptimized :: Boolean
@@ -295,11 +306,17 @@ type RunInstancesRequest
     , count :: Int
     , userData :: String
     , tags :: Map String String
+    , iamRole :: Maybe IamRole
     )
 
 type TagSpecificationsInt
   = { "ResourceType" :: String
     , "Tags" :: List TagInt
+    }
+
+type IamInstanceProfileSpecificationInt
+  = { "Name" :: Maybe String
+    , "Arn" :: Maybe String
     }
 
 type RunInstancesRequestInt
@@ -312,6 +329,7 @@ type RunInstancesRequestInt
     , "MaxCount" :: Int
     , "UserData" :: String
     , "TagSpecifications" :: List TagSpecificationsInt
+    , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
     }
 
 type RunInstancesResponse
@@ -342,6 +360,7 @@ runInstances
     , count
     , userData
     , tags
+    , iamRole
     } = do
   let
     requestInt :: RunInstancesRequestInt
@@ -355,6 +374,7 @@ runInstances
       , "MaxCount": count
       , "UserData": userData
       , "TagSpecifications": List.singleton { "ResourceType": "instance", "Tags": tagsToTagInts tags }
+      , "IamInstanceProfile": iamProfileToInt <$> iamRole
       }
     requestJson = writeJSON requestInt
     cli =
@@ -362,6 +382,7 @@ runInstances
         <> " --cli-input-json '"
         <> requestJson
         <> "'"
+  traceM cli
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromRunInstancesResponseInt =<< readJSON' =<< outputJson
 
@@ -434,10 +455,11 @@ stopInstances
   pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."StoppingInstances") <$> response
 
 awsCliBase :: forall t. BaseRequest t -> String -> String
-awsCliBase { profile, region } command = do
+awsCliBase { profile, region, dryRun } command = do
   "aws ec2 "
     <> command
     <> " --output json --color off "
+    <> (if dryRun then " --dry-run" else "")
     <> (fromMaybe "" $ (\r -> " --region " <> r) <$> unwrap <$> region)
     <> (fromMaybe "" $ (\p -> " --profile " <> p) <$> profile)
 
