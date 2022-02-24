@@ -7,8 +7,10 @@ module Erl.Aws
   , InstanceState(..)
   , InstanceType(..)
   , KeyName(..)
+  , Profile(..)
   , Region(..)
   , RunningInstance
+  , UserData(..)
   , describeInstances
   , runInstances
   , stopInstances
@@ -16,17 +18,19 @@ module Erl.Aws
   ) where
 
 import Prelude
-import Control.Monad.Except (except, runExcept)
+import Control.Alt ((<|>))
+import Control.Monad.Except (except, runExcept, withExcept)
 import Data.Bifunctor (bimap)
 import Data.DateTime (DateTime)
 import Data.DateTime.Parsing (parseFullDateTime, toUTC)
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
-import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep (class Generic, Argument(..), Constructor(..), NoArguments(..), Sum(..), to)
 import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
+import Data.Symbol (class IsSymbol, reflectSymbol)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Debug (traceM)
@@ -35,9 +39,11 @@ import Erl.Data.List (List)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
-import Foreign (F, ForeignError(..), MultipleErrors, readString)
-import Simple.JSON (class ReadForeign, class WriteForeign, E, readJSON', writeJSON)
+import Foreign (F, Foreign, ForeignError(..), MultipleErrors, readString)
+import Foreign as Foreign
+import Simple.JSON (class ReadForeign, class WriteForeign, E, read', readImpl, readJSON', writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
+import Type.Prelude (Proxy(..))
 
 newtype InstanceId
   = InstanceId String
@@ -87,6 +93,18 @@ derive instance Generic Region _
 instance Show Region where
   show = genericShow
 
+newtype Profile
+  = Profile String
+
+derive newtype instance Eq Profile
+derive newtype instance Ord Profile
+derive newtype instance ReadForeign Profile
+derive newtype instance WriteForeign Profile
+derive instance Newtype Profile _
+derive instance Generic Profile _
+instance Show Profile where
+  show = genericShow
+
 newtype KeyName
   = KeyName String
 
@@ -111,6 +129,18 @@ derive instance Generic ClientToken _
 instance Show ClientToken where
   show = genericShow
 
+newtype UserData
+  = UserData String
+
+derive newtype instance Eq UserData
+derive newtype instance Ord UserData
+derive newtype instance ReadForeign UserData
+derive newtype instance WriteForeign UserData
+derive instance Newtype UserData _
+derive instance Generic UserData _
+instance Show UserData where
+  show = genericShow
+
 type RunningInstance
   = { publicDnsName :: Maybe String
     , privateDnsName :: String
@@ -125,6 +155,8 @@ data InstanceState
   | Stopping
   | Stopped
 
+derive instance Eq InstanceState
+
 type InstanceDescription
   = { instanceId :: InstanceId
     , instanceType :: InstanceType
@@ -133,6 +165,7 @@ type InstanceDescription
     , launchTime :: DateTime
     , state :: InstanceState
     , clientToken :: Maybe ClientToken
+    , userData :: Maybe UserData
     }
 
 type TagInt
@@ -181,6 +214,7 @@ type InstanceDescriptionInt
     , "PublicDnsName" :: Maybe String
     , "State" :: StateInt
     , "ClientToken" :: String
+    , "UserData" :: Maybe String
     }
 
 type StateInt
@@ -210,6 +244,7 @@ fromInstanceDescriptionInt
     , "LaunchTime": (DateTimeInt launchTime)
     , "State": stateInt
     , "ClientToken": clientToken
+    , "UserData": userData
     } = ado
   instanceState <- stateIntToInstanceState stateInt instanceDescriptionInt
   in { instanceId: InstanceId instanceId
@@ -219,6 +254,7 @@ fromInstanceDescriptionInt
   , launchTime
   , state: instanceState
   , clientToken: ClientToken <$> emptyStringToNothing clientToken
+  , userData: (map UserData <<< emptyStringToNothing) =<< userData
   }
 
 mandatory :: forall a. String -> Maybe a -> F a
@@ -253,7 +289,7 @@ stateIntToInstanceState { "Name": unknown } _ =
 
 type BaseRequest a
   = { region :: Maybe Region
-    , profile :: Maybe String
+    , profile :: Maybe Profile
     , dryRun :: Boolean
     | a
     }
@@ -292,6 +328,11 @@ describeInstances req@{ instanceIds } = do
 data IamRole
   = RoleArn String
   | RoleName String
+
+derive instance Eq IamRole
+derive instance Generic IamRole _
+instance ReadForeign IamRole where
+  readImpl = genericTaggedReadForeign
 
 iamProfileToInt :: IamRole -> IamInstanceProfileSpecificationInt
 iamProfileToInt (RoleArn arn) = { "Arn": Just arn, "Name": Nothing }
@@ -461,7 +502,7 @@ awsCliBase { profile, region, dryRun } command = do
     <> " --output json --color off "
     <> (if dryRun then " --dry-run" else "")
     <> (fromMaybe "" $ (\r -> " --region " <> r) <$> unwrap <$> region)
-    <> (fromMaybe "" $ (\p -> " --profile " <> p) <$> profile)
+    <> (fromMaybe "" $ (\p -> " --profile " <> p) <$> unwrap <$> profile)
 
 runAwsCli :: String -> Effect (F String)
 runAwsCli cmd = do
@@ -476,3 +517,51 @@ type CmdError
     }
 
 foreign import runCommand :: String -> Effect (Either CmdError String)
+
+------------------------------------------------------------------------------
+-- GenericTaggedReadForeign
+genericTaggedReadForeign ::
+  forall a rep.
+  Generic a rep =>
+  GenericTaggedReadForeign rep =>
+  Foreign -> Foreign.F a
+genericTaggedReadForeign f = to <$> genericTaggedReadForeignImpl f
+
+class GenericTaggedReadForeign rep where
+  genericTaggedReadForeignImpl :: Foreign -> Foreign.F rep
+
+instance genericTaggedReadForeignSum ::
+  ( GenericTaggedReadForeign a
+  , GenericTaggedReadForeign b
+  ) =>
+  GenericTaggedReadForeign (Sum a b) where
+  genericTaggedReadForeignImpl f =
+    Inl
+      <$> genericTaggedReadForeignImpl f
+      <|> Inr
+      <$> genericTaggedReadForeignImpl f
+
+instance genericTaggedReadForeignConstructor ::
+  ( GenericTaggedReadForeign a
+  , IsSymbol name
+  ) =>
+  GenericTaggedReadForeign (Constructor name a) where
+  genericTaggedReadForeignImpl f = do
+    r :: { "type" :: String, value :: Foreign } <- read' f
+    if r."type" == name then
+      withExcept (map $ ErrorAtProperty name) $ Constructor <$> genericTaggedReadForeignImpl r.value
+    else
+      Foreign.fail $ ForeignError $ "Wrong type tag " <> r."type" <> " where " <> name <> " was expected."
+    where
+    nameP = Proxy :: Proxy name
+    name = reflectSymbol nameP
+
+instance genericTaggedReadForeignArgument ::
+  ( ReadForeign a
+  ) =>
+  GenericTaggedReadForeign (Argument a) where
+  genericTaggedReadForeignImpl f = Argument <$> readImpl f
+
+instance genericTaggedReadForeignNoArgument ::
+  GenericTaggedReadForeign NoArguments where
+  genericTaggedReadForeignImpl _ = pure NoArguments
