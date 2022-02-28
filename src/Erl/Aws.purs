@@ -11,6 +11,7 @@ module Erl.Aws
   , Region(..)
   , RunningInstance
   , UserData(..)
+  , defaultMetadataOptions
   , describeInstances
   , runInstances
   , stopInstances
@@ -23,7 +24,7 @@ import Control.Monad.Except (except, runExcept, withExcept)
 import Data.Bifunctor (bimap)
 import Data.DateTime (DateTime)
 import Data.DateTime.Parsing (parseFullDateTime, toUTC)
-import Data.Either (Either(..))
+import Data.Either (Either(..), note)
 import Data.Foldable (foldl)
 import Data.Generic.Rep (class Generic, Argument(..), Constructor(..), NoArguments(..), Sum(..), to)
 import Data.List.NonEmpty (singleton)
@@ -39,6 +40,7 @@ import Erl.Data.List (List)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
+import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
 import Foreign (F, Foreign, ForeignError(..), MultipleErrors, readString)
 import Foreign as Foreign
 import Simple.JSON (class ReadForeign, class WriteForeign, E, read', readImpl, readJSON', writeJSON)
@@ -142,9 +144,9 @@ instance Show UserData where
   show = genericShow
 
 type RunningInstance
-  = { publicDnsName :: Maybe String
-    , privateDnsName :: String
-    , privateIpAddress :: String
+  = { publicDnsName :: Maybe Hostname
+    , privateDnsName :: Hostname
+    , privateIpAddress :: IpAddress
     }
 
 data InstanceState
@@ -274,7 +276,7 @@ stateIntToInstanceState { "Name": "running" }
   , "PublicDnsName": publicDnsName
   } = ado
   privateDnsName <- mandatory "PrivateDnsName" privateDnsName
-  privateIpAddress <- mandatory "PrivateIpAddress" privateIpAddress
+  privateIpAddress <- (\addr -> except $ note (singleton $ ForeignError $ "Invalid IpAddress: addr") $ parseIpAddress addr) =<< mandatory "PrivateIpAddress" privateIpAddress
   in Running { privateDnsName, privateIpAddress, publicDnsName: emptyStringToNothing =<< publicDnsName }
 stateIntToInstanceState { "Name": "shutting-down" } _ =
   pure ShuttingDown
@@ -338,6 +340,23 @@ iamProfileToInt :: IamRole -> IamInstanceProfileSpecificationInt
 iamProfileToInt (RoleArn arn) = { "Arn": Just arn, "Name": Nothing }
 iamProfileToInt (RoleName name) = { "Arn": Nothing, "Name": Just name }
 
+defaultMetadataOptions :: MetadataOptions
+defaultMetadataOptions =
+  { httpEndpoint: true
+  , httpProtocolIpv6: true
+  , httpPutResponseHopLimit: 1
+  , httpTokens: false
+  , instanceMetadataTags: false
+  }
+
+type MetadataOptions
+  = { httpEndpoint :: Boolean
+    , httpProtocolIpv6 :: Boolean
+    , httpPutResponseHopLimit :: Int
+    , httpTokens :: Boolean
+    , instanceMetadataTags :: Boolean
+    }
+
 type RunInstancesRequest
   = BaseRequest ( clientToken :: ClientToken
     , ebsOptimized :: Boolean
@@ -348,6 +367,7 @@ type RunInstancesRequest
     , userData :: String
     , tags :: Map String String
     , iamRole :: Maybe IamRole
+    , metadataOptions :: Maybe MetadataOptions
     )
 
 type TagSpecificationsInt
@@ -360,6 +380,29 @@ type IamInstanceProfileSpecificationInt
     , "Arn" :: Maybe String
     }
 
+type InstanceMetadataOptionsRequestInt
+  = { "HttpEndpoint" :: String
+    , "HttpProtocolIpv6" :: String
+    , "HttpPutResponseHopLimit" :: Int
+    , "HttpTokens" :: String
+    , "InstanceMetadataTags" :: String
+    }
+
+metadataOptionsToInt :: MetadataOptions -> InstanceMetadataOptionsRequestInt
+metadataOptionsToInt
+  { httpEndpoint
+  , httpProtocolIpv6
+  , httpPutResponseHopLimit
+  , httpTokens
+  , instanceMetadataTags
+  } =
+  { "HttpEndpoint": booleanToDisabledEnabled httpEndpoint
+  , "HttpProtocolIpv6": booleanToDisabledEnabled httpProtocolIpv6
+  , "HttpPutResponseHopLimit": httpPutResponseHopLimit
+  , "HttpTokens": if httpTokens then "required" else "optional"
+  , "InstanceMetadataTags": booleanToDisabledEnabled instanceMetadataTags
+  }
+
 type RunInstancesRequestInt
   = { "ClientToken" :: ClientToken
     , "EbsOptimized" :: Boolean
@@ -371,6 +414,7 @@ type RunInstancesRequestInt
     , "UserData" :: String
     , "TagSpecifications" :: List TagSpecificationsInt
     , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
+    , "MetadataOptions" :: Maybe InstanceMetadataOptionsRequestInt
     }
 
 type RunInstancesResponse
@@ -402,6 +446,7 @@ runInstances
     , userData
     , tags
     , iamRole
+    , metadataOptions
     } = do
   let
     requestInt :: RunInstancesRequestInt
@@ -416,6 +461,7 @@ runInstances
       , "UserData": userData
       , "TagSpecifications": List.singleton { "ResourceType": "instance", "Tags": tagsToTagInts tags }
       , "IamInstanceProfile": iamProfileToInt <$> iamRole
+      , "MetadataOptions": metadataOptionsToInt <$> metadataOptions
       }
     requestJson = writeJSON requestInt
     cli =
@@ -494,6 +540,10 @@ stopInstances
     response :: F StopInstancesResponseInt
     response = readJSON' =<< outputJson
   pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."StoppingInstances") <$> response
+
+booleanToDisabledEnabled :: Boolean -> String
+booleanToDisabledEnabled true = "enabled"
+booleanToDisabledEnabled false = "disabled"
 
 awsCliBase :: forall t. BaseRequest t -> String -> String
 awsCliBase { profile, region, dryRun } command = do
