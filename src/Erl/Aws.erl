@@ -1,7 +1,7 @@
 -module(erl_aws@foreign).
 
 -export([ runCommand/1
-
+        , base64Decode/1
         ]).
 
 runCommand(Cmd) ->
@@ -22,4 +22,12 @@ get_value(Name, Default, List) ->
     case lists:keyfind(Name, 1, List) of
         false -> Default;
         {Name, Value} -> Value
+    end.
+
+base64Decode(Encoded) ->
+    try
+        {just, base64:decode(Encoded)}
+    catch
+        _:_:_ ->
+            {nothing}
     end.

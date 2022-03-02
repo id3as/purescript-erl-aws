@@ -13,6 +13,7 @@ module Erl.Aws
   , UserData(..)
   , defaultMetadataOptions
   , describeInstances
+  , describeInstanceUserData
   , runInstances
   , stopInstances
   , terminateInstances
@@ -34,7 +35,7 @@ import Data.Show.Generic (genericShow)
 import Data.Symbol (class IsSymbol, reflectSymbol)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Debug (traceM)
+import Debug (spy, traceM)
 import Effect (Effect)
 import Erl.Data.List (List)
 import Erl.Data.List as List
@@ -167,7 +168,6 @@ type InstanceDescription
     , launchTime :: DateTime
     , state :: InstanceState
     , clientToken :: Maybe ClientToken
-    , userData :: Maybe UserData
     }
 
 type TagInt
@@ -246,7 +246,6 @@ fromInstanceDescriptionInt
     , "LaunchTime": (DateTimeInt launchTime)
     , "State": stateInt
     , "ClientToken": clientToken
-    , "UserData": userData
     } = ado
   instanceState <- stateIntToInstanceState stateInt instanceDescriptionInt
   in { instanceId: InstanceId instanceId
@@ -256,7 +255,6 @@ fromInstanceDescriptionInt
   , launchTime
   , state: instanceState
   , clientToken: ClientToken <$> emptyStringToNothing clientToken
-  , userData: (map UserData <<< emptyStringToNothing) =<< userData
   }
 
 mandatory :: forall a. String -> Maybe a -> F a
@@ -326,6 +324,42 @@ describeInstances req@{ instanceIds } = do
         <> "'"
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromDescribeInstancesInt =<< readJSON' =<< outputJson
+
+type DescribeInstanceUserDataRequest
+  = BaseRequest ( instanceId :: InstanceId )
+
+type DescribeInstanceAttributeRequestInt
+  = { "InstanceId" :: InstanceId
+    , "Attribute" :: String
+    }
+
+type DescribeInstanceUserDataResponseInt
+  = { "InstanceId" :: String
+    , "UserData" :: { "Value" :: Maybe String }
+    }
+
+describeInstanceUserData :: DescribeInstanceUserDataRequest -> Effect (Either MultipleErrors (Maybe UserData))
+describeInstanceUserData req@{ instanceId } = do
+  let
+    requestInt :: DescribeInstanceAttributeRequestInt
+    requestInt =
+      { "InstanceId": instanceId
+      , "Attribute": "userData"
+      }
+    requestJson = writeJSON requestInt
+    cli =
+      awsCliBase req "describe-instance-attribute"
+        <> " --cli-input-json '"
+        <> requestJson
+        <> "'"
+  outputJson <- runAwsCli cli
+  let
+    parsed :: F DescribeInstanceUserDataResponseInt
+    parsed = readJSON' =<< outputJson
+
+    userData :: F (Maybe UserData)
+    userData = (\{ "UserData": { "Value": userData } } -> (map UserData <<< emptyStringToNothing) =<< base64Decode =<< userData) <$> parsed
+  pure $ runExcept $ userData
 
 data IamRole
   = RoleArn String
@@ -615,3 +649,5 @@ instance genericTaggedReadForeignArgument ::
 instance genericTaggedReadForeignNoArgument ::
   GenericTaggedReadForeign NoArguments where
   genericTaggedReadForeignImpl _ = pure NoArguments
+
+foreign import base64Decode :: String -> Maybe String
