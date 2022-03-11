@@ -10,6 +10,8 @@ module Erl.Aws
   , Profile(..)
   , Region(..)
   , RunningInstance
+  , SecurityGroupId(..)
+  , SubnetId(..)
   , UserData(..)
   , defaultMetadataOptions
   , describeInstances
@@ -106,6 +108,30 @@ derive newtype instance WriteForeign Profile
 derive instance Newtype Profile _
 derive instance Generic Profile _
 instance Show Profile where
+  show = genericShow
+
+newtype SecurityGroupId
+  = SecurityGroupId String
+
+derive newtype instance Eq SecurityGroupId
+derive newtype instance Ord SecurityGroupId
+derive newtype instance ReadForeign SecurityGroupId
+derive newtype instance WriteForeign SecurityGroupId
+derive instance Newtype SecurityGroupId _
+derive instance Generic SecurityGroupId _
+instance Show SecurityGroupId where
+  show = genericShow
+
+newtype SubnetId
+  = SubnetId String
+
+derive newtype instance Eq SubnetId
+derive newtype instance Ord SubnetId
+derive newtype instance ReadForeign SubnetId
+derive newtype instance WriteForeign SubnetId
+derive instance Newtype SubnetId _
+derive instance Generic SubnetId _
+instance Show SubnetId where
   show = genericShow
 
 newtype KeyName
@@ -401,7 +427,9 @@ type RunInstancesRequest
     , userData :: String
     , tags :: Map String String
     , iamRole :: Maybe IamRole
+    , securityGroups :: List SecurityGroupId
     , metadataOptions :: Maybe MetadataOptions
+    , subnetId :: Maybe SubnetId
     )
 
 type TagSpecificationsInt
@@ -447,8 +475,10 @@ type RunInstancesRequestInt
     , "MaxCount" :: Int
     , "UserData" :: String
     , "TagSpecifications" :: List TagSpecificationsInt
+    , "SecurityGroupIds" :: List SecurityGroupId
     , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
     , "MetadataOptions" :: Maybe InstanceMetadataOptionsRequestInt
+    , "SubnetId" :: Maybe SubnetId
     }
 
 type RunInstancesResponse
@@ -480,7 +510,9 @@ runInstances
     , userData
     , tags
     , iamRole
+    , securityGroups
     , metadataOptions
+    , subnetId
     } = do
   let
     requestInt :: RunInstancesRequestInt
@@ -496,6 +528,8 @@ runInstances
       , "TagSpecifications": List.singleton { "ResourceType": "instance", "Tags": tagsToTagInts tags }
       , "IamInstanceProfile": iamProfileToInt <$> iamRole
       , "MetadataOptions": metadataOptionsToInt <$> metadataOptions
+      , "SecurityGroupIds": securityGroups
+      , "SubnetId": subnetId
       }
     requestJson = writeJSON requestInt
     cli =
@@ -590,7 +624,7 @@ awsCliBase { profile, region, dryRun } command = do
 
 runAwsCli :: String -> Effect (F String)
 runAwsCli cmd = do
-  res <- runCommand cmd
+  res <- runCommand $ spy "CMD:" cmd
   case res of
     Left { output } -> pure $ except $ Left $ singleton $ ForeignError $ "aws cli failure: " <> output
     Right output -> pure $ except $ Right output
