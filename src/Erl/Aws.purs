@@ -19,9 +19,11 @@ module Erl.Aws
   , runInstances
   , stopInstances
   , terminateInstances
+  , createTags
   ) where
 
 import Prelude
+
 import Control.Alt ((<|>))
 import Control.Monad.Except (except, runExcept, withExcept)
 import Data.Bifunctor (bimap)
@@ -608,6 +610,32 @@ stopInstances
     response :: F StopInstancesResponseInt
     response = readJSON' =<< outputJson
   pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."StoppingInstances") <$> response
+
+type CreateTagsRequest
+  = BaseRequest ( instanceId :: InstanceId
+                , tags :: Map String String)
+
+type CreateTagsRequestInt
+  = { "Resources" :: List InstanceId
+    , "Tags" :: List TagInt
+    }
+
+createTags :: CreateTagsRequest -> Effect (E Unit)
+createTags req@{instanceId, tags} = do
+  let
+    requestInt :: CreateTagsRequestInt
+    requestInt =
+      { "Resources": List.singleton instanceId
+      , "Tags": tagsToTagInts tags
+      }
+    requestJson = writeJSON requestInt
+    cli =
+      awsCliBase req "create-tags"
+        <> " --cli-input-json '"
+        <> requestJson
+        <> "'"
+  output <- runAwsCli cli
+  pure $ runExcept $ (const unit) <$> output
 
 booleanToDisabledEnabled :: Boolean -> String
 booleanToDisabledEnabled true = "enabled"
