@@ -424,7 +424,7 @@ type RunInstancesRequest
     , ebsOptimized :: Boolean
     , imageId :: ImageId
     , instanceType :: InstanceType
-    , keyName :: KeyName
+    , keyName :: Maybe KeyName
     , count :: Int
     , userData :: String
     , tags :: Map String String
@@ -472,7 +472,7 @@ type RunInstancesRequestInt
     , "EbsOptimized" :: Boolean
     , "ImageId" :: ImageId
     , "InstanceType" :: InstanceType
-    , "KeyName" :: KeyName
+    , "KeyName" :: Maybe KeyName
     , "MinCount" :: Int
     , "MaxCount" :: Int
     , "UserData" :: String
