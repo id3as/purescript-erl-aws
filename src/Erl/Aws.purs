@@ -48,7 +48,8 @@ import Erl.Data.Map as Map
 import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
 import Foreign (F, Foreign, ForeignError(..), MultipleErrors, readString)
 import Foreign as Foreign
-import Simple.JSON (class ReadForeign, class WriteForeign, E, read', readImpl, readJSON', writeJSON)
+import JsonLd as JsonLd
+import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, read', readImpl, readJSON', writeImpl, writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
 import Type.Prelude (Proxy(..))
 
@@ -59,6 +60,7 @@ derive newtype instance Eq InstanceId
 derive newtype instance Ord InstanceId
 derive newtype instance ReadForeign InstanceId
 derive newtype instance WriteForeign InstanceId
+derive newtype instance WriteForeignKey InstanceId
 derive instance Newtype InstanceId _
 derive instance Generic InstanceId _
 instance Show InstanceId where
@@ -95,10 +97,14 @@ derive newtype instance Eq Region
 derive newtype instance Ord Region
 derive newtype instance ReadForeign Region
 derive newtype instance WriteForeign Region
+derive newtype instance WriteForeignKey Region
 derive instance Newtype Region _
 derive instance Generic Region _
 instance Show Region where
   show = genericShow
+
+instance JsonLd.JsonLdContext Region where
+  getContextValue _ = JsonLd.ContextValue "Region"
 
 newtype Profile
   = Profile String
@@ -187,6 +193,21 @@ data InstanceState
   | Stopped
 
 derive instance Eq InstanceState
+
+instance WriteForeign InstanceState where
+  writeImpl s =
+    let
+      instanceData = case s of
+        Running i -> Just i
+        _ -> Nothing
+      state = case s of
+        Pending -> "pending"
+        Running _ -> "running"
+        ShuttingDown -> "shutting-down"
+        Terminated -> "terminated"
+        Stopping -> "stopping"
+        Stopped -> "stopped"
+    in writeImpl { state, instanceData }
 
 type InstanceDescription
   = { instanceId :: InstanceId
