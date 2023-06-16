@@ -7,8 +7,10 @@ module Erl.Aws
   , InstanceState(..)
   , InstanceType(..)
   , KeyName(..)
+  , OptInStatus(..)
   , Profile(..)
   , Region(..)
+  , RegionDescription(..)
   , RunningInstance
   , SecurityGroupId(..)
   , SubnetId(..)
@@ -16,6 +18,7 @@ module Erl.Aws
   , defaultMetadataOptions
   , describeInstances
   , describeInstanceUserData
+  , describeRegions
   , runInstances
   , stopInstances
   , terminateInstances
@@ -24,6 +27,7 @@ module Erl.Aws
 
 import Prelude
 
+import Common.Shared.Json (genericTaggedWriteForeign)
 import Control.Alt ((<|>))
 import Control.Monad.Except (except, runExcept, withExcept)
 import Data.Bifunctor (bimap)
@@ -53,8 +57,7 @@ import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
 import Type.Prelude (Proxy(..))
 
-newtype InstanceId
-  = InstanceId String
+newtype InstanceId = InstanceId String
 
 derive newtype instance Eq InstanceId
 derive newtype instance Ord InstanceId
@@ -66,8 +69,7 @@ derive instance Generic InstanceId _
 instance Show InstanceId where
   show = genericShow
 
-newtype InstanceType
-  = InstanceType String
+newtype InstanceType = InstanceType String
 
 derive newtype instance Eq InstanceType
 derive newtype instance Ord InstanceType
@@ -78,8 +80,7 @@ derive instance Generic InstanceType _
 instance Show InstanceType where
   show = genericShow
 
-newtype ImageId
-  = ImageId String
+newtype ImageId = ImageId String
 
 derive newtype instance Eq ImageId
 derive newtype instance Ord ImageId
@@ -90,8 +91,7 @@ derive instance Generic ImageId _
 instance Show ImageId where
   show = genericShow
 
-newtype Region
-  = Region String
+newtype Region = Region String
 
 derive newtype instance Eq Region
 derive newtype instance Ord Region
@@ -106,8 +106,7 @@ instance Show Region where
 instance JsonLd.JsonLdContext Region where
   getContextValue _ = JsonLd.ContextValue "Region"
 
-newtype Profile
-  = Profile String
+newtype Profile = Profile String
 
 derive newtype instance Eq Profile
 derive newtype instance Ord Profile
@@ -118,8 +117,7 @@ derive instance Generic Profile _
 instance Show Profile where
   show = genericShow
 
-newtype SecurityGroupId
-  = SecurityGroupId String
+newtype SecurityGroupId = SecurityGroupId String
 
 derive newtype instance Eq SecurityGroupId
 derive newtype instance Ord SecurityGroupId
@@ -130,8 +128,7 @@ derive instance Generic SecurityGroupId _
 instance Show SecurityGroupId where
   show = genericShow
 
-newtype SubnetId
-  = SubnetId String
+newtype SubnetId = SubnetId String
 
 derive newtype instance Eq SubnetId
 derive newtype instance Ord SubnetId
@@ -142,8 +139,7 @@ derive instance Generic SubnetId _
 instance Show SubnetId where
   show = genericShow
 
-newtype KeyName
-  = KeyName String
+newtype KeyName = KeyName String
 
 derive newtype instance Eq KeyName
 derive newtype instance Ord KeyName
@@ -154,8 +150,7 @@ derive instance Generic KeyName _
 instance Show KeyName where
   show = genericShow
 
-newtype ClientToken
-  = ClientToken String
+newtype ClientToken = ClientToken String
 
 derive newtype instance Eq ClientToken
 derive newtype instance Ord ClientToken
@@ -166,8 +161,7 @@ derive instance Generic ClientToken _
 instance Show ClientToken where
   show = genericShow
 
-newtype UserData
-  = UserData String
+newtype UserData = UserData String
 
 derive newtype instance Eq UserData
 derive newtype instance Ord UserData
@@ -178,11 +172,11 @@ derive instance Generic UserData _
 instance Show UserData where
   show = genericShow
 
-type RunningInstance
-  = { publicDnsName :: Maybe Hostname
-    , privateDnsName :: Hostname
-    , privateIpAddress :: IpAddress
-    }
+type RunningInstance =
+  { publicDnsName :: Maybe Hostname
+  , privateDnsName :: Hostname
+  , privateIpAddress :: IpAddress
+  }
 
 data InstanceState
   = Pending
@@ -207,22 +201,34 @@ instance WriteForeign InstanceState where
         Terminated -> "terminated"
         Stopping -> "stopping"
         Stopped -> "stopped"
-    in writeImpl { state, instanceData }
+    in
+      writeImpl { state, instanceData }
 
-type InstanceDescription
-  = { instanceId :: InstanceId
-    , instanceType :: InstanceType
-    , imageId :: ImageId
-    , tags :: Map String String
-    , launchTime :: DateTime
-    , state :: InstanceState
-    , clientToken :: Maybe ClientToken
-    }
+type InstanceDescription =
+  { instanceId :: InstanceId
+  , instanceType :: InstanceType
+  , imageId :: ImageId
+  , tags :: Map String String
+  , launchTime :: DateTime
+  , state :: InstanceState
+  , clientToken :: Maybe ClientToken
+  }
 
-type TagInt
-  = { "Key" :: String
-    , "Value" :: String
-    }
+data OptInStatus
+  = OptInNotRequired
+  | OptedIn
+  | NotOptedIn
+
+type RegionDescription =
+  { regionName :: Region
+  , endpoint :: String
+  , optInStatus :: OptInStatus
+  }
+
+type TagInt =
+  { "Key" :: String
+  , "Value" :: String
+  }
 
 tagIntsToTags :: List TagInt -> Map String String
 tagIntsToTags = foldl insertTag Map.empty
@@ -232,8 +238,7 @@ tagIntsToTags = foldl insertTag Map.empty
 tagsToTagInts :: Map String String -> List TagInt
 tagsToTagInts tags = (\(Tuple key value) -> { "Key": key, "Value": value }) <$> Map.toUnfoldable tags
 
-newtype DateTimeInt
-  = DateTimeInt DateTime
+newtype DateTimeInt = DateTimeInt DateTime
 
 instance readForeignDateTimeInt :: ReadForeign DateTimeInt where
   readImpl =
@@ -246,37 +251,67 @@ instance readForeignDateTimeInt :: ReadForeign DateTimeInt where
 parseDateTime :: forall m. Monad m => ParserT String m DateTime
 parseDateTime = parseFullDateTime >>= (\full -> maybe (fail "Invalid datetime offset") (pure) $ toUTC full)
 
-type DescribeInstancesInt
-  = { "Reservations" :: List ReservationInt
-    }
+type DescribeRegionsInt =
+  { "Regions" :: List RegionDescriptionInt
+  }
 
-type ReservationInt
-  = { "Instances" :: List InstanceDescriptionInt
-    }
+type RegionDescriptionInt =
+  { "Endpoint" :: String
+  , "RegionName" :: String
+  , "OptInStatus" :: String
+  }
 
-type InstanceDescriptionInt
-  = { "InstanceId" :: String
-    , "InstanceType" :: String
-    , "ImageId" :: String
-    , "Tags" :: Maybe (List TagInt)
-    , "LaunchTime" :: DateTimeInt
-    , "PrivateDnsName" :: Maybe String
-    , "PrivateIpAddress" :: Maybe String
-    , "PublicDnsName" :: Maybe String
-    , "State" :: StateInt
-    , "ClientToken" :: String
-    , "UserData" :: Maybe String
-    }
+type DescribeInstancesInt =
+  { "Reservations" :: List ReservationInt
+  }
 
-type StateInt
-  = { "Code" :: Int
-    , "Name" :: String
-    }
+type ReservationInt =
+  { "Instances" :: List InstanceDescriptionInt
+  }
 
-type InstanceStateChangeInt
-  = { "CurrentState" :: StateInt
-    , "PreviousState" :: StateInt
-    , "InstanceId" :: String
+type InstanceDescriptionInt =
+  { "InstanceId" :: String
+  , "InstanceType" :: String
+  , "ImageId" :: String
+  , "Tags" :: Maybe (List TagInt)
+  , "LaunchTime" :: DateTimeInt
+  , "PrivateDnsName" :: Maybe String
+  , "PrivateIpAddress" :: Maybe String
+  , "PublicDnsName" :: Maybe String
+  , "State" :: StateInt
+  , "ClientToken" :: String
+  , "UserData" :: Maybe String
+  }
+
+type StateInt =
+  { "Code" :: Int
+  , "Name" :: String
+  }
+
+type InstanceStateChangeInt =
+  { "CurrentState" :: StateInt
+  , "PreviousState" :: StateInt
+  , "InstanceId" :: String
+  }
+
+fromDescribeRegionsInt :: DescribeRegionsInt -> F (List RegionDescription)
+fromDescribeRegionsInt { "Regions": regions } = traverse fromRegionInt regions
+
+fromRegionInt :: RegionDescriptionInt -> F RegionDescription
+fromRegionInt
+  { "Endpoint": endpoint
+  , "RegionName": regionName
+  , "OptInStatus": optInStatus
+  } = ado
+  optInStatus' <- case optInStatus of
+    "opt-in-not-required" -> pure OptInNotRequired
+    "opted-in" -> pure OptedIn
+    "not-opted-in" -> pure NotOptedIn
+    _ -> except $ Left $ singleton $ ForeignError $ optInStatus <> " is not recognised"
+  in
+    { regionName: Region regionName
+    , endpoint
+    , optInStatus: optInStatus'
     }
 
 fromDescribeInstancesInt :: DescribeInstancesInt -> F (List InstanceDescription)
@@ -297,14 +332,15 @@ fromInstanceDescriptionInt
     , "ClientToken": clientToken
     } = ado
   instanceState <- stateIntToInstanceState stateInt instanceDescriptionInt
-  in { instanceId: InstanceId instanceId
-  , instanceType: InstanceType instanceType
-  , imageId: ImageId imageId
-  , tags: tagIntsToTags $ fromMaybe List.nil tagsInt
-  , launchTime
-  , state: instanceState
-  , clientToken: ClientToken <$> emptyStringToNothing clientToken
-  }
+  in
+    { instanceId: InstanceId instanceId
+    , instanceType: InstanceType instanceType
+    , imageId: ImageId imageId
+    , tags: tagIntsToTags $ fromMaybe List.nil tagsInt
+    , launchTime
+    , state: instanceState
+    , clientToken: ClientToken <$> emptyStringToNothing clientToken
+    }
 
 mandatory :: forall a. String -> Maybe a -> F a
 mandatory name Nothing = except $ Left $ singleton $ ForeignError $ name <> " is mandatory"
@@ -317,7 +353,8 @@ emptyStringToNothing str = Just str
 stateIntToInstanceState :: StateInt -> InstanceDescriptionInt -> F InstanceState
 stateIntToInstanceState { "Name": "pending" } _ =
   pure Pending
-stateIntToInstanceState { "Name": "running" }
+stateIntToInstanceState
+  { "Name": "running" }
   { "PrivateDnsName": privateDnsName
   , "PrivateIpAddress": privateIpAddress
   , "PublicDnsName": publicDnsName
@@ -336,26 +373,26 @@ stateIntToInstanceState { "Name": "stopped" } _ =
 stateIntToInstanceState { "Name": unknown } _ =
   except $ Left $ singleton $ ForeignError $ "Unknown state: " <> unknown
 
-type BaseRequest a
-  = { region :: Maybe Region
-    , profile :: Maybe Profile
-    , dryRun :: Boolean
-    | a
-    }
+type BaseRequest a =
+  { region :: Maybe Region
+  , profile :: Maybe Profile
+  , dryRun :: Boolean
+  | a
+  }
 
-type DescribeInstancesRequest
-  = BaseRequest ( instanceIds :: Maybe (List InstanceId)
-    )
+type DescribeInstancesRequest = BaseRequest
+  ( instanceIds :: Maybe (List InstanceId)
+  )
 
-type FilterInt
-  = { "Name" :: String
-    , "Values" :: List String
-    }
+type FilterInt =
+  { "Name" :: String
+  , "Values" :: List String
+  }
 
-type DescribeInstancesRequestInt
-  = { "Filters" :: List FilterInt
-    , "InstanceIds" :: List InstanceId
-    }
+type DescribeInstancesRequestInt =
+  { "Filters" :: List FilterInt
+  , "InstanceIds" :: List InstanceId
+  }
 
 describeInstances :: DescribeInstancesRequest → Effect (Either MultipleErrors (List InstanceDescription))
 describeInstances req@{ instanceIds } = do
@@ -374,18 +411,17 @@ describeInstances req@{ instanceIds } = do
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromDescribeInstancesInt =<< readJSON' =<< outputJson
 
-type DescribeInstanceUserDataRequest
-  = BaseRequest ( instanceId :: InstanceId )
+type DescribeInstanceUserDataRequest = BaseRequest (instanceId :: InstanceId)
 
-type DescribeInstanceAttributeRequestInt
-  = { "InstanceId" :: InstanceId
-    , "Attribute" :: String
-    }
+type DescribeInstanceAttributeRequestInt =
+  { "InstanceId" :: InstanceId
+  , "Attribute" :: String
+  }
 
-type DescribeInstanceUserDataResponseInt
-  = { "InstanceId" :: String
-    , "UserData" :: { "Value" :: Maybe String }
-    }
+type DescribeInstanceUserDataResponseInt =
+  { "InstanceId" :: String
+  , "UserData" :: { "Value" :: Maybe String }
+  }
 
 describeInstanceUserData :: DescribeInstanceUserDataRequest -> Effect (Either MultipleErrors (Maybe UserData))
 describeInstanceUserData req@{ instanceId } = do
@@ -410,12 +446,23 @@ describeInstanceUserData req@{ instanceId } = do
     userData = (\{ "UserData": { "Value": userData } } -> (map UserData <<< emptyStringToNothing) =<< base64Decode =<< userData) <$> parsed
   pure $ runExcept $ userData
 
+describeRegions :: BaseRequest () -> Effect (Either MultipleErrors (List RegionDescription))
+describeRegions req = do
+  let
+    cli = awsCliBase req "describe-regions"
+
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromDescribeRegionsInt =<< readJSON' =<< outputJson
+
 data IamRole
   = RoleArn String
   | RoleName String
 
 derive instance Eq IamRole
 derive instance Generic IamRole _
+instance WriteForeign IamRole where
+  writeImpl = genericTaggedWriteForeign
+
 instance ReadForeign IamRole where
   readImpl = genericTaggedReadForeign
 
@@ -432,46 +479,46 @@ defaultMetadataOptions =
   , instanceMetadataTags: false
   }
 
-type MetadataOptions
-  = { httpEndpoint :: Boolean
-    , httpProtocolIpv6 :: Boolean
-    , httpPutResponseHopLimit :: Int
-    , httpTokens :: Boolean
-    , instanceMetadataTags :: Boolean
-    }
+type MetadataOptions =
+  { httpEndpoint :: Boolean
+  , httpProtocolIpv6 :: Boolean
+  , httpPutResponseHopLimit :: Int
+  , httpTokens :: Boolean
+  , instanceMetadataTags :: Boolean
+  }
 
-type RunInstancesRequest
-  = BaseRequest ( clientToken :: ClientToken
-    , ebsOptimized :: Boolean
-    , imageId :: ImageId
-    , instanceType :: InstanceType
-    , keyName :: Maybe KeyName
-    , count :: Int
-    , userData :: String
-    , tags :: Map String String
-    , iamRole :: Maybe IamRole
-    , securityGroups :: List SecurityGroupId
-    , metadataOptions :: Maybe MetadataOptions
-    , subnetId :: Maybe SubnetId
-    )
+type RunInstancesRequest = BaseRequest
+  ( clientToken :: ClientToken
+  , ebsOptimized :: Boolean
+  , imageId :: ImageId
+  , instanceType :: InstanceType
+  , keyName :: Maybe KeyName
+  , count :: Int
+  , userData :: String
+  , tags :: Map String String
+  , iamRole :: Maybe IamRole
+  , securityGroups :: List SecurityGroupId
+  , metadataOptions :: Maybe MetadataOptions
+  , subnetId :: Maybe SubnetId
+  )
 
-type TagSpecificationsInt
-  = { "ResourceType" :: String
-    , "Tags" :: List TagInt
-    }
+type TagSpecificationsInt =
+  { "ResourceType" :: String
+  , "Tags" :: List TagInt
+  }
 
-type IamInstanceProfileSpecificationInt
-  = { "Name" :: Maybe String
-    , "Arn" :: Maybe String
-    }
+type IamInstanceProfileSpecificationInt =
+  { "Name" :: Maybe String
+  , "Arn" :: Maybe String
+  }
 
-type InstanceMetadataOptionsRequestInt
-  = { "HttpEndpoint" :: String
-    , "HttpProtocolIpv6" :: String
-    , "HttpPutResponseHopLimit" :: Int
-    , "HttpTokens" :: String
-    , "InstanceMetadataTags" :: String
-    }
+type InstanceMetadataOptionsRequestInt =
+  { "HttpEndpoint" :: String
+  , "HttpProtocolIpv6" :: String
+  , "HttpPutResponseHopLimit" :: Int
+  , "HttpTokens" :: String
+  , "InstanceMetadataTags" :: String
+  }
 
 metadataOptionsToInt :: MetadataOptions -> InstanceMetadataOptionsRequestInt
 metadataOptionsToInt
@@ -488,33 +535,33 @@ metadataOptionsToInt
   , "InstanceMetadataTags": booleanToDisabledEnabled instanceMetadataTags
   }
 
-type RunInstancesRequestInt
-  = { "ClientToken" :: ClientToken
-    , "EbsOptimized" :: Boolean
-    , "ImageId" :: ImageId
-    , "InstanceType" :: InstanceType
-    , "KeyName" :: Maybe KeyName
-    , "MinCount" :: Int
-    , "MaxCount" :: Int
-    , "UserData" :: String
-    , "TagSpecifications" :: List TagSpecificationsInt
-    , "SecurityGroupIds" :: List SecurityGroupId
-    , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
-    , "MetadataOptions" :: Maybe InstanceMetadataOptionsRequestInt
-    , "SubnetId" :: Maybe SubnetId
-    }
+type RunInstancesRequestInt =
+  { "ClientToken" :: ClientToken
+  , "EbsOptimized" :: Boolean
+  , "ImageId" :: ImageId
+  , "InstanceType" :: InstanceType
+  , "KeyName" :: Maybe KeyName
+  , "MinCount" :: Int
+  , "MaxCount" :: Int
+  , "UserData" :: String
+  , "TagSpecifications" :: List TagSpecificationsInt
+  , "SecurityGroupIds" :: List SecurityGroupId
+  , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
+  , "MetadataOptions" :: Maybe InstanceMetadataOptionsRequestInt
+  , "SubnetId" :: Maybe SubnetId
+  }
 
-type RunInstancesResponse
-  = { instances :: List InstanceDescription
-    , ownerId :: String
-    , reservationId :: String
-    }
+type RunInstancesResponse =
+  { instances :: List InstanceDescription
+  , ownerId :: String
+  , reservationId :: String
+  }
 
-type RunInstancesResponseInt
-  = { "Instances" :: List InstanceDescriptionInt
-    , "OwnerId" :: String
-    , "ReservationId" :: String
-    }
+type RunInstancesResponseInt =
+  { "Instances" :: List InstanceDescriptionInt
+  , "OwnerId" :: String
+  , "ReservationId" :: String
+  }
 
 fromRunInstancesResponseInt :: RunInstancesResponseInt -> F RunInstancesResponse
 fromRunInstancesResponseInt { "Instances": instances, "OwnerId": ownerId, "ReservationId": reservationId } = ado
@@ -564,17 +611,17 @@ runInstances
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromRunInstancesResponseInt =<< readJSON' =<< outputJson
 
-type TerminateInstancesRequest
-  = BaseRequest ( instanceIds :: List InstanceId
-    )
+type TerminateInstancesRequest = BaseRequest
+  ( instanceIds :: List InstanceId
+  )
 
-type TerminateInstancesRequestInt
-  = { "InstanceIds" :: List InstanceId
-    }
+type TerminateInstancesRequestInt =
+  { "InstanceIds" :: List InstanceId
+  }
 
-type TerminateInstancesResponseInt
-  = { "TerminatingInstances" :: List InstanceStateChangeInt
-    }
+type TerminateInstancesResponseInt =
+  { "TerminatingInstances" :: List InstanceStateChangeInt
+  }
 
 terminateInstances :: TerminateInstancesRequest -> Effect (Either MultipleErrors (List InstanceId))
 terminateInstances
@@ -598,17 +645,17 @@ terminateInstances
     response = readJSON' =<< outputJson
   pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."TerminatingInstances") <$> response
 
-type StopInstancesRequest
-  = BaseRequest ( instanceIds :: List InstanceId
-    )
+type StopInstancesRequest = BaseRequest
+  ( instanceIds :: List InstanceId
+  )
 
-type StopInstancesRequestInt
-  = { "InstanceIds" :: List InstanceId
-    }
+type StopInstancesRequestInt =
+  { "InstanceIds" :: List InstanceId
+  }
 
-type StopInstancesResponseInt
-  = { "StoppingInstances" :: List InstanceStateChangeInt
-    }
+type StopInstancesResponseInt =
+  { "StoppingInstances" :: List InstanceStateChangeInt
+  }
 
 stopInstances :: StopInstancesRequest -> Effect (E (List InstanceId))
 stopInstances
@@ -632,17 +679,18 @@ stopInstances
     response = readJSON' =<< outputJson
   pure $ runExcept $ (map (InstanceId <<< _."InstanceId")) <$> (_."StoppingInstances") <$> response
 
-type CreateTagsRequest
-  = BaseRequest ( instanceId :: InstanceId
-                , tags :: Map String String)
+type CreateTagsRequest = BaseRequest
+  ( instanceId :: InstanceId
+  , tags :: Map String String
+  )
 
-type CreateTagsRequestInt
-  = { "Resources" :: List InstanceId
-    , "Tags" :: List TagInt
-    }
+type CreateTagsRequestInt =
+  { "Resources" :: List InstanceId
+  , "Tags" :: List TagInt
+  }
 
 createTags :: CreateTagsRequest -> Effect (E Unit)
-createTags req@{instanceId, tags} = do
+createTags req@{ instanceId, tags } = do
   let
     requestInt :: CreateTagsRequestInt
     requestInt =
@@ -678,20 +726,21 @@ runAwsCli cmd = do
     Left { output } -> pure $ except $ Left $ singleton $ ForeignError $ "aws cli failure: " <> output
     Right output -> pure $ except $ Right output
 
-type CmdError
-  = { exitStatus :: Number
-    , output :: String
-    }
+type CmdError =
+  { exitStatus :: Number
+  , output :: String
+  }
 
 foreign import runCommand :: String -> Effect (Either CmdError String)
 
 ------------------------------------------------------------------------------
 -- GenericTaggedReadForeign
-genericTaggedReadForeign ::
-  forall a rep.
-  Generic a rep =>
-  GenericTaggedReadForeign rep =>
-  Foreign -> Foreign.F a
+genericTaggedReadForeign
+  :: forall a rep
+   . Generic a rep
+  => GenericTaggedReadForeign rep
+  => Foreign
+  -> Foreign.F a
 genericTaggedReadForeign f = to <$> genericTaggedReadForeignImpl f
 
 class GenericTaggedReadForeign rep where
@@ -706,7 +755,7 @@ instance genericTaggedReadForeignSum ::
     Inl
       <$> genericTaggedReadForeignImpl f
       <|> Inr
-      <$> genericTaggedReadForeignImpl f
+        <$> genericTaggedReadForeignImpl f
 
 instance genericTaggedReadForeignConstructor ::
   ( GenericTaggedReadForeign a
