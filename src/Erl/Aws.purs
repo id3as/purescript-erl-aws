@@ -36,7 +36,6 @@ module Erl.Aws
 
 import Prelude
 
-import Common.Shared.Json (genericEnumReadForeign, genericEnumWriteForeign)
 import Control.Monad.Except (except, runExcept)
 import Data.Bifunctor (bimap)
 import Data.DateTime (DateTime)
@@ -56,7 +55,7 @@ import Erl.Data.List (List)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
-import Erl.Json (genericTaggedReadForeign, genericTaggedWriteForeign)
+import Erl.Json (genericTaggedReadForeign, genericTaggedWriteForeign, genericEnumReadForeign, genericEnumWriteForeign)
 import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
 import Foreign (F, ForeignError(..), MultipleErrors, readString, unsafeFromForeign)
 import JsonLd as JsonLd
