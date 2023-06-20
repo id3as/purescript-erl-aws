@@ -36,6 +36,7 @@ module Erl.Aws
 
 import Prelude
 
+import Common.Shared.Json (genericEnumReadForeign, genericEnumWriteForeign)
 import Control.Monad.Except (except, runExcept)
 import Data.Bifunctor (bimap)
 import Data.DateTime (DateTime)
@@ -225,6 +226,13 @@ data OptInStatus
   = OptInNotRequired
   | OptedIn
   | NotOptedIn
+
+derive instance Generic OptInStatus _
+instance WriteForeign OptInStatus where
+  writeImpl = genericEnumWriteForeign
+
+instance ReadForeign OptInStatus where
+  readImpl = genericEnumReadForeign
 
 type RegionDescription =
   { regionName :: Region
