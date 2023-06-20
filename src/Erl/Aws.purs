@@ -1,14 +1,22 @@
 module Erl.Aws
   ( ClientToken(..)
+  , EbsInfo(..)
+  , EbsOptimizedInfo(..)
   , IamRole(..)
   , ImageId(..)
   , InstanceDescription(..)
+  , InstanceTypeDescription(..)
   , InstanceId(..)
   , InstanceState(..)
   , InstanceType(..)
   , KeyName(..)
   , OptInStatus(..)
+  , MemoryInfo(..)
+  , NetworkCard(..)
+  , NetworkInfo(..)
+  , PlacementGroupInfo(..)
   , PlacementGroupStrategies(..)
+  , ProcessorInfo(..)
   , Profile(..)
   , Region(..)
   , RegionDescription(..)
@@ -22,6 +30,7 @@ module Erl.Aws
   , SupportedVirtualizationTypes(..)
   , TypeOffering
   , UserData(..)
+  , VCpuInfo(..)
   , createTags
   , defaultMetadataOptions
   , describeInstanceTypes
@@ -777,6 +786,10 @@ instance ReadForeign SupportedUsageClasses where
       "spot" -> pure Spot
       _ -> unsafeCrashWith "Unexpected SupportedUsageClasses"
 
+instance WriteForeign SupportedUsageClasses where
+  writeImpl OnDemand = writeImpl "on-demand"
+  writeImpl Spot = writeImpl "spot"
+
 instance Show SupportedUsageClasses where
   show = genericShow
 
@@ -791,6 +804,10 @@ instance ReadForeign SupportedRootDeviceTypes where
       "instance-store" -> pure InstanceStore
       _ -> unsafeCrashWith "Unexpected SupportedRootDeviceTypes"
 
+instance WriteForeign SupportedRootDeviceTypes where
+  writeImpl Ebs = writeImpl "ebs"
+  writeImpl InstanceStore = writeImpl "instance-store"
+
 instance Show SupportedRootDeviceTypes where
   show = genericShow
 
@@ -804,6 +821,10 @@ instance ReadForeign SupportedVirtualizationTypes where
       "hvm" -> pure Hvm
       "paravirtual" -> pure Paravirtual
       _ -> unsafeCrashWith "Unexpected SupportedVirtualizationTypes"
+
+instance WriteForeign SupportedVirtualizationTypes where
+  writeImpl Hvm = writeImpl "hvm"
+  writeImpl Paravirtual = writeImpl "paravirtual"
 
 instance Show SupportedVirtualizationTypes where
   show = genericShow
@@ -822,6 +843,13 @@ instance ReadForeign SupportedArchitectures where
       "arm64_mac" -> pure Arm64_mac
       _ -> unsafeCrashWith "Unexpected SupportedArchitectures"
 
+instance WriteForeign SupportedArchitectures where
+  writeImpl I386 = writeImpl "i386"
+  writeImpl X86_64 = writeImpl "x86_64"
+  writeImpl Arm64 = writeImpl "arm64"
+  writeImpl X86_64_mac = writeImpl "x86_64_mac"
+  writeImpl Arm64_mac = writeImpl "arm64_mac"
+
 instance Show SupportedArchitectures where
   show = genericShow
 
@@ -837,6 +865,11 @@ instance ReadForeign PlacementGroupStrategies where
       "spread" -> pure Spread
       _ -> unsafeCrashWith "Unexpected PlacementGroupStrategies"
 
+instance WriteForeign PlacementGroupStrategies where
+  writeImpl Cluster = writeImpl "cluster"
+  writeImpl Partition = writeImpl "partition"
+  writeImpl Spread = writeImpl "spread"
+
 instance Show PlacementGroupStrategies where
   show = genericShow
 
@@ -850,6 +883,10 @@ instance ReadForeign SupportedBootModes where
       "legacy-bios" -> pure LegacyBios
       "uefi" -> pure Uefi
       _ -> unsafeCrashWith "Unexpected SupportedBootModes"
+
+instance WriteForeign SupportedBootModes where
+  writeImpl LegacyBios = writeImpl "legacy-bios"
+  writeImpl Uefi = writeImpl "uefi"
 
 instance Show SupportedBootModes where
   show = genericShow
