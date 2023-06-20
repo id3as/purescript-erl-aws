@@ -1,45 +1,64 @@
 module Test.Main where
 
 import Prelude
+
 import Control.Monad.Free (Free)
-import Data.Either (Either(..), fromRight')
-import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..), fromMaybe')
-import Data.Show.Generic (genericShow)
-import Effect (Effect)
+import Data.Either (Either(..), hush, isRight)
+import Data.Foldable (length)
+import Data.List as DL
+import Data.Maybe (Maybe(..))
+import Debug (spy)
 import Effect.Class (liftEffect)
-import Erl.Aws (describeInstances)
-import Erl.Data.Binary.IOData (fromBinary)
-import Erl.Data.Binary.UTF8 (toBinary)
+import Erl.Atom (atom)
+import Erl.Aws (describeInstanceTypes, describeTypeOfferings)
 import Erl.Data.List (List)
 import Erl.Data.List as List
-import Erl.Data.Tuple (tuple4)
-import Erl.Kernel.Inet (ConnectAddress(..), HostAddress(..), IpAddress(..), SocketActive(..), SocketAddress(..), ActiveError(..))
-import Erl.Kernel.Tcp (TcpMessage(..))
-import Erl.Kernel.Tcp as Tcp
-import Erl.Kernel.Udp (UdpMessage(..))
-import Erl.Kernel.Udp as Udp
-import Erl.Process (Process, ProcessM, receive, spawnLink, unsafeRunProcessM, (!))
-import Erl.Process.Class (self)
+import Erl.Kernel.Application as Application
+import Erl.Process (unsafeRunProcessM)
 import Erl.Test.EUnit (TestF, TestSet, collectTests, suite, test)
-import Erl.Types (Timeout(..))
-import Erl.Untagged.Union (class RuntimeType, type (|$|), type (|+|), Nil, RTLiteralAtom, RTOption, RTTuple1, Union, inj, prj)
-import Partial.Unsafe (unsafeCrashWith)
-import Test.Assert (assertEqual, assertTrue)
+import Test.Assert (assertEqual, assertTrue')
 
 main_test_ :: List TestSet
 main_test_ =
-  collectTests describeTests
+  collectTests awsTests
 
-describeTests :: Free TestF Unit
-describeTests = do
-  suite "describe-instances tests" do
+-- These tests won't work unless the aws CLI already has a token
+awsTests :: Free TestF Unit
+awsTests = do
+  suite "describe-type-offerings tests" do
     test "Can parse response" do
+      void $ Application.ensureAllStarted $ atom "erlexec"
       unsafeRunProcessM
         $ do
-            let actual = describeInstances describeResp
-            liftEffect
-              $ assertEqual { expected: Right List.nil, actual }
+            actual <- liftEffect $ describeTypeOfferings { region: Nothing, profile: Nothing, dryRun: false }
+            case actual of
+              Right actualList -> do
+                liftEffect $ assertTrue' "At least :shrugs: 100 type offerings" $ (length actualList) > 100
+              Left _ -> do
+                liftEffect $ assertEqual { expected: Right List.nil, actual }
+
+  suite "describe-instance-type tests" do
+    test "Can parse response" do
+      void $ Application.ensureAllStarted $ atom "erlexec"
+      unsafeRunProcessM
+        $ do
+            actual <- liftEffect $ describeInstanceTypes { region: Nothing, profile: Nothing, dryRun: false }
+            case actual of
+              Right actualList -> do
+                -- There were 624 today
+                liftEffect $ assertTrue' "At least :shrugs: 600 instance types" $ length actualList > 600
+              Left _ -> do
+                liftEffect $ assertEqual { expected: Right List.nil, actual }
+
+-- describeTests :: Free TestF Unit
+-- describeTests = do
+--   suite "describe-instances tests" do
+--     test "Can parse response" do
+--       unsafeRunProcessM
+--         $ do
+--             let actual = describeInstances { region: Nothing, profile: Nothing, dryRun: false }
+--             liftEffect
+--               $ assertEqual { expected: Right List.nil, actual }
 
 describeResp =
   """
@@ -745,3 +764,4 @@ describeResp =
   ]
 }
 """
+

@@ -8,39 +8,45 @@ module Erl.Aws
   , InstanceType(..)
   , KeyName(..)
   , OptInStatus(..)
+  , PlacementGroupStrategies(..)
   , Profile(..)
   , Region(..)
   , RegionDescription(..)
   , RunningInstance
   , SecurityGroupId(..)
   , SubnetId(..)
+  , SupportedArchitectures(..)
+  , SupportedBootModes(..)
+  , SupportedRootDeviceTypes(..)
+  , SupportedUsageClasses(..)
+  , SupportedVirtualizationTypes(..)
+  , TypeOffering
   , UserData(..)
+  , createTags
   , defaultMetadataOptions
-  , describeInstances
+  , describeInstanceTypes
   , describeInstanceUserData
+  , describeInstances
   , describeRegions
+  , describeTypeOfferings
   , runInstances
   , stopInstances
   , terminateInstances
-  , createTags
   ) where
 
 import Prelude
 
-import Common.Shared.Json (genericTaggedWriteForeign)
-import Control.Alt ((<|>))
-import Control.Monad.Except (except, runExcept, withExcept)
+import Control.Monad.Except (except, runExcept)
 import Data.Bifunctor (bimap)
 import Data.DateTime (DateTime)
 import Data.DateTime.Parsing (parseFullDateTime, toUTC)
 import Data.Either (Either(..), note)
 import Data.Foldable (foldl)
-import Data.Generic.Rep (class Generic, Argument(..), Constructor(..), NoArguments(..), Sum(..), to)
+import Data.Generic.Rep (class Generic)
 import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
-import Data.Symbol (class IsSymbol, reflectSymbol)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Debug (spy, traceM)
@@ -49,13 +55,14 @@ import Erl.Data.List (List)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
+import Erl.Json (genericTaggedReadForeign, genericTaggedWriteForeign)
 import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
-import Foreign (F, Foreign, ForeignError(..), MultipleErrors, readString)
-import Foreign as Foreign
+import Foreign (F, ForeignError(..), MultipleErrors, readString, unsafeFromForeign)
 import JsonLd as JsonLd
-import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, read', readImpl, readJSON', writeImpl, writeJSON)
+import Partial.Unsafe (unsafeCrashWith)
+import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, readJSON', writeImpl, writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
-import Type.Prelude (Proxy(..))
+import Unsafe.Coerce (unsafeCoerce)
 
 newtype InstanceId = InstanceId String
 
@@ -706,6 +713,499 @@ createTags req@{ instanceId, tags } = do
   output <- runAwsCli cli
   pure $ runExcept $ (const unit) <$> output
 
+type TypeOfferingsRequest = BaseRequest ()
+
+type TypeOfferingsInt =
+  { "InstanceTypeOfferings" :: List TypeOfferingInt
+  }
+
+type TypeOfferingInt =
+  { "InstanceType" :: String
+  , "LocationType" :: String
+  , "Location" :: String
+  }
+
+type TypeOffering =
+  { instanceType :: String
+  , locationType :: String
+  , location :: String
+  }
+
+fromDescribeTypeOfferingsResponseInt :: TypeOfferingsInt -> F (List TypeOffering)
+fromDescribeTypeOfferingsResponseInt { "InstanceTypeOfferings": typeOfferings } = ado
+  types <- traverse fromTypeOfferingInt typeOfferings
+  in types
+
+fromTypeOfferingInt :: TypeOfferingInt -> F TypeOffering
+fromTypeOfferingInt
+  { "InstanceType": instanceType
+  , "LocationType": locationType
+  , "Location": location
+  } = do
+  pure $
+    { instanceType
+    , locationType
+    , location
+    }
+
+describeTypeOfferings :: TypeOfferingsRequest -> Effect (Either MultipleErrors (List TypeOffering))
+describeTypeOfferings req = do
+  let
+    cli =
+      awsCliBase req "describe-instance-type-offerings"
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromDescribeTypeOfferingsResponseInt =<< readJSON' =<< outputJson
+
+type InstanceTypeRequest = BaseRequest ()
+
+data SupportedUsageClasses = OnDemand | Spot
+
+derive instance Eq SupportedUsageClasses
+derive instance Generic SupportedUsageClasses _
+instance ReadForeign SupportedUsageClasses where
+  readImpl f =
+    case unsafeFromForeign f of
+      "on-demand" -> pure OnDemand
+      "spot" -> pure Spot
+      _ -> unsafeCrashWith "Unexpected SupportedUsageClasses"
+
+instance Show SupportedUsageClasses where
+  show = genericShow
+
+data SupportedRootDeviceTypes = Ebs | InstanceStore
+
+derive instance Eq SupportedRootDeviceTypes
+derive instance Generic SupportedRootDeviceTypes _
+instance ReadForeign SupportedRootDeviceTypes where
+  readImpl f =
+    case unsafeFromForeign f of
+      "ebs" -> pure Ebs
+      "instance-store" -> pure InstanceStore
+      _ -> unsafeCrashWith "Unexpected SupportedRootDeviceTypes"
+
+instance Show SupportedRootDeviceTypes where
+  show = genericShow
+
+data SupportedVirtualizationTypes = Hvm | Paravirtual
+
+derive instance Eq SupportedVirtualizationTypes
+derive instance Generic SupportedVirtualizationTypes _
+instance ReadForeign SupportedVirtualizationTypes where
+  readImpl f =
+    case unsafeFromForeign f of
+      "hvm" -> pure Hvm
+      "paravirtual" -> pure Paravirtual
+      _ -> unsafeCrashWith "Unexpected SupportedVirtualizationTypes"
+
+instance Show SupportedVirtualizationTypes where
+  show = genericShow
+
+data SupportedArchitectures = I386 | X86_64 | Arm64 | X86_64_mac | Arm64_mac
+
+derive instance Eq SupportedArchitectures
+derive instance Generic SupportedArchitectures _
+instance ReadForeign SupportedArchitectures where
+  readImpl f =
+    case unsafeFromForeign f of
+      "i386" -> pure I386
+      "x86_64" -> pure X86_64
+      "arm64" -> pure Arm64
+      "x86_64_mac" -> pure X86_64_mac
+      "arm64_mac" -> pure Arm64_mac
+      _ -> unsafeCrashWith "Unexpected SupportedArchitectures"
+
+instance Show SupportedArchitectures where
+  show = genericShow
+
+data PlacementGroupStrategies = Cluster | Partition | Spread
+
+derive instance Eq PlacementGroupStrategies
+derive instance Generic PlacementGroupStrategies _
+instance ReadForeign PlacementGroupStrategies where
+  readImpl f =
+    case unsafeFromForeign f of
+      "cluster" -> pure Cluster
+      "partition" -> pure Partition
+      "spread" -> pure Spread
+      _ -> unsafeCrashWith "Unexpected PlacementGroupStrategies"
+
+instance Show PlacementGroupStrategies where
+  show = genericShow
+
+data SupportedBootModes = LegacyBios | Uefi
+
+derive instance Eq SupportedBootModes
+derive instance Generic SupportedBootModes _
+instance ReadForeign SupportedBootModes where
+  readImpl f =
+    case unsafeFromForeign f of
+      "legacy-bios" -> pure LegacyBios
+      "uefi" -> pure Uefi
+      _ -> unsafeCrashWith "Unexpected SupportedBootModes"
+
+instance Show SupportedBootModes where
+  show = genericShow
+
+type ProcessorInfo =
+  { supportedArchitectures :: List SupportedArchitectures
+  , sustainedClockSpeedInGhz :: Maybe Number
+  }
+
+type ProcessorInfoInt =
+  { "SupportedArchitectures" :: List SupportedArchitectures
+  , "SustainedClockSpeedInGhz" :: Maybe Number
+  }
+
+fromProcessorInfoInt :: ProcessorInfoInt -> F ProcessorInfo
+fromProcessorInfoInt
+  { "SupportedArchitectures": supportedArchitectures
+  , "SustainedClockSpeedInGhz": sustainedClockSpeedInGhz
+  } = do
+  pure $
+    { supportedArchitectures
+    , sustainedClockSpeedInGhz
+    }
+
+type VCpuInfo =
+  { defaultCores :: Int
+  , defaultThreadsPerCore :: Int
+  , defaultVCpus :: Maybe Int
+  , validCores :: Maybe (List Int)
+  , validThreadsPerCore :: Maybe (List Int)
+  }
+
+type VCpuInfoInt =
+  { "DefaultCores" :: Int
+  , "DefaultThreadsPerCore" :: Int
+  , "DefaultVCpus" :: Maybe Int
+  , "ValidCores" :: Maybe (List Int)
+  , "ValidThreadsPerCore" :: Maybe (List Int)
+  }
+
+fromVCpuInfoInt :: Maybe VCpuInfoInt -> F (Maybe VCpuInfo)
+fromVCpuInfoInt info =
+  case info of
+    Just
+      { "DefaultCores": defaultCores
+      , "DefaultThreadsPerCore": defaultThreadsPerCore
+      , "DefaultVCpus": defaultVCpus
+      , "ValidCores": validCores
+      , "ValidThreadsPerCore": validThreadsPerCore
+      } -> do
+      pure $ Just
+        { defaultCores
+        , defaultThreadsPerCore
+        , defaultVCpus
+        , validCores
+        , validThreadsPerCore
+        }
+    Nothing -> pure Nothing
+
+type MemoryInfo =
+  { sizeInMiB :: Int
+  }
+
+type MemoryInfoInt =
+  { "SizeInMiB" :: Int
+  }
+
+fromMemoryInfoInt :: MemoryInfoInt -> F MemoryInfo
+fromMemoryInfoInt
+  { "SizeInMiB": sizeInMiB
+  } = do
+  pure $
+    { sizeInMiB
+    }
+
+type EbsOptimizedInfo =
+  { baselineBandwidthInMbps :: Int
+  , baselineThroughputInMBps :: Number
+  , baselineIops :: Int
+  , maximumBandwidthInMbps :: Int
+  , maximumThroughputInMBps :: Number
+  , maximumIops :: Int
+  }
+
+type EbsOptimizedInfoInt =
+  { "BaselineBandwidthInMbps" :: Int
+  , "BaselineThroughputInMBps" :: Number
+  , "BaselineIops" :: Int
+  , "MaximumBandwidthInMbps" :: Int
+  , "MaximumThroughputInMBps" :: Number
+  , "MaximumIops" :: Int
+  }
+
+fromEbsOptimizedInfoInt :: Maybe EbsOptimizedInfoInt -> F (Maybe EbsOptimizedInfo)
+fromEbsOptimizedInfoInt info =
+  case info of
+    Just
+      { "BaselineBandwidthInMbps": baselineBandwidthInMbps
+      , "BaselineThroughputInMBps": baselineThroughputInMBps
+      , "BaselineIops": baselineIops
+      , "MaximumBandwidthInMbps": maximumBandwidthInMbps
+      , "MaximumThroughputInMBps": maximumThroughputInMBps
+      , "MaximumIops": maximumIops
+      } -> do
+      pure
+        $ Just
+        $
+          { baselineBandwidthInMbps
+          , baselineThroughputInMBps
+          , baselineIops
+          , maximumBandwidthInMbps
+          , maximumThroughputInMBps
+          , maximumIops
+          }
+    Nothing -> do
+      pure Nothing
+
+type EbsInfo =
+  { ebsOptimizedSupport :: String
+  , encryptionSupport :: String
+  , ebsOptimizedInfo :: Maybe EbsOptimizedInfo
+  , nvmeSupport :: String
+  }
+
+type EbsInfoInt =
+  { "EbsOptimizedSupport" :: String
+  , "EncryptionSupport" :: String
+  , "EbsOptimizedInfo" :: Maybe EbsOptimizedInfoInt
+  , "NvmeSupport" :: String
+  }
+
+fromEbsInfoInt :: EbsInfoInt -> F EbsInfo
+fromEbsInfoInt
+  { "EbsOptimizedSupport": ebsOptimizedSupport
+  , "EncryptionSupport": encryptionSupport
+  , "EbsOptimizedInfo": ebsOptimizedInfo
+  , "NvmeSupport": nvmeSupport
+  } = ado
+  info <- fromEbsOptimizedInfoInt ebsOptimizedInfo
+  in
+    { ebsOptimizedSupport
+    , encryptionSupport
+    , ebsOptimizedInfo: info
+    , nvmeSupport
+    }
+
+type NetworkCard =
+  { networkCardIndex :: Int
+  , networkPerformance :: String
+  , maximumNetworkInterfaces :: Int
+  }
+
+type NetworkCardInt =
+  { "NetworkCardIndex" :: Int
+  , "NetworkPerformance" :: String
+  , "MaximumNetworkInterfaces" :: Int
+  }
+
+fromNetworkCardInt :: NetworkCardInt -> F NetworkCard
+fromNetworkCardInt
+  { "NetworkCardIndex": networkCardIndex
+  , "NetworkPerformance": networkPerformance
+  , "MaximumNetworkInterfaces": maximumNetworkInterfaces
+  } = do
+  pure $
+    { networkCardIndex
+    , networkPerformance
+    , maximumNetworkInterfaces
+    }
+
+type NetworkInfo =
+  { networkPerformance :: String
+  , maximumNetworkInterfaces :: Int
+  , maximumNetworkCards :: Int
+  , defaultNetworkCardIndex :: Int
+  , networkCards :: List NetworkCard
+  , ipv4AddressesPerInterface :: Int
+  , ipv6AddressesPerInterface :: Int
+  , ipv6Supported :: Boolean
+  , enaSupport :: String
+  , efaSupported :: Boolean
+  , encryptionInTransitSupported :: Boolean
+  }
+
+type NetworkInfoInt =
+  { "NetworkPerformance" :: String
+  , "MaximumNetworkInterfaces" :: Int
+  , "MaximumNetworkCards" :: Int
+  , "DefaultNetworkCardIndex" :: Int
+  , "NetworkCards" :: List NetworkCardInt
+  , "Ipv4AddressesPerInterface" :: Int
+  , "Ipv6AddressesPerInterface" :: Int
+  , "Ipv6Supported" :: Boolean
+  , "EnaSupport" :: String
+  , "EfaSupported" :: Boolean
+  , "EncryptionInTransitSupported" :: Boolean
+  }
+
+fromNetworkInfoInt :: NetworkInfoInt -> F NetworkInfo
+fromNetworkInfoInt
+  { "NetworkPerformance": networkPerformance
+  , "MaximumNetworkInterfaces": maximumNetworkInterfaces
+  , "MaximumNetworkCards": maximumNetworkCards
+  , "DefaultNetworkCardIndex": defaultNetworkCardIndex
+  , "NetworkCards": networkCardsInt
+  , "Ipv4AddressesPerInterface": ipv4AddressesPerInterface
+  , "Ipv6AddressesPerInterface": ipv6AddressesPerInterface
+  , "Ipv6Supported": ipv6Supported
+  , "EnaSupport": enaSupport
+  , "EfaSupported": efaSupported
+  , "EncryptionInTransitSupported": encryptionInTransitSupported
+  } = ado
+
+  networkCards <- traverse fromNetworkCardInt networkCardsInt
+
+  in
+    { networkPerformance
+    , maximumNetworkInterfaces
+    , maximumNetworkCards
+    , defaultNetworkCardIndex
+    , networkCards
+    , ipv4AddressesPerInterface
+    , ipv6AddressesPerInterface
+    , ipv6Supported
+    , enaSupport
+    , efaSupported
+    , encryptionInTransitSupported
+    }
+
+type PlacementGroupInfo =
+  { supportedStrategies :: List PlacementGroupStrategies
+  }
+
+type PlacementGroupInfoInt =
+  { "SupportedStrategies" :: List PlacementGroupStrategies
+  }
+
+fromPlacementGroupInfo :: PlacementGroupInfoInt -> F PlacementGroupInfo
+fromPlacementGroupInfo
+  { "SupportedStrategies": supportedStrategies
+  } = do
+  pure
+    { supportedStrategies
+    }
+
+type InstanceTypeDescription =
+  { instanceType :: InstanceType
+  , currentGeneration :: Maybe Boolean
+  , freeTierEligible :: Boolean
+  , supportedUsageClasses :: List SupportedUsageClasses
+  , supportedRootDeviceTypes :: List SupportedRootDeviceTypes
+  , supportedVirtualizationTypes :: List SupportedVirtualizationTypes
+  , bareMetal :: Boolean
+  , hypervisor :: Maybe String
+  , processorInfo :: ProcessorInfo
+  , vCpuInfo :: Maybe VCpuInfo
+  , memoryInfo :: MemoryInfo
+  , instanceStorageSupported :: Boolean
+  , ebsInfo :: EbsInfo
+  , networkInfo :: NetworkInfo
+  , placementGroupInfo :: PlacementGroupInfo
+  , hibernationSupported :: Boolean
+  , burstablePerformanceSupported :: Maybe Boolean
+  , dedicatedHostsSupported :: Maybe Boolean
+  , autoRecoverySupported :: Maybe Boolean
+  , supportedBootModes :: List SupportedBootModes
+  }
+
+type InstanceTypeDescriptionInt =
+  { "InstanceType" :: String
+  , "CurrentGeneration" :: Maybe Boolean
+  , "FreeTierEligible" :: Boolean
+  , "SupportedUsageClasses" :: List SupportedUsageClasses
+  , "SupportedRootDeviceTypes" :: List SupportedRootDeviceTypes
+  , "SupportedVirtualizationTypes" :: List SupportedVirtualizationTypes
+  , "BareMetal" :: Boolean
+  , "Hypervisor" :: Maybe String
+  , "ProcessorInfo" :: ProcessorInfoInt
+  , "VCpuInfo" :: Maybe VCpuInfoInt
+  , "MemoryInfo" :: MemoryInfoInt
+  , "InstanceStorageSupported" :: Boolean
+  , "EbsInfo" :: EbsInfoInt
+  , "NetworkInfo" :: NetworkInfoInt
+  , "PlacementGroupInfo" :: PlacementGroupInfoInt
+  , "HibernationSupported" :: Boolean
+  , "BurstablePerformanceSupported" :: Maybe Boolean
+  , "DedicatedHostsSupported" :: Maybe Boolean
+  , "AutoRecoverySupported" :: Maybe Boolean
+  , "SupportedBootModes" :: List SupportedBootModes
+  }
+
+fromInstanceTypeDescriptionInt :: InstanceTypeDescriptionInt -> F InstanceTypeDescription
+fromInstanceTypeDescriptionInt
+  { "InstanceType": instanceType
+  , "CurrentGeneration": currentGeneration
+  , "FreeTierEligible": freeTierEligible
+  , "SupportedUsageClasses": supportedUsageClasses
+  , "SupportedRootDeviceTypes": supportedRootDeviceTypes
+  , "SupportedVirtualizationTypes": supportedVirtualizationTypes
+  , "BareMetal": bareMetal
+  , "Hypervisor": hypervisor
+  , "ProcessorInfo": processorInfoInt
+  , "VCpuInfo": vCpuInfoInt
+  , "MemoryInfo": memoryInfoInt
+  , "InstanceStorageSupported": instanceStorageSupported
+  , "EbsInfo": ebsInfoInt
+  , "NetworkInfo": networkInfoInt
+  , "PlacementGroupInfo": placementGroupInfoInt
+  , "HibernationSupported": hibernationSupported
+  , "BurstablePerformanceSupported": burstablePerformanceSupported
+  , "DedicatedHostsSupported": dedicatedHostsSupported
+  , "AutoRecoverySupported": autoRecoverySupported
+  , "SupportedBootModes": supportedBootModes
+  } = ado
+  processorInfo <- fromProcessorInfoInt processorInfoInt
+  vCpuInfo <- fromVCpuInfoInt vCpuInfoInt
+  ebsInfo <- fromEbsInfoInt ebsInfoInt
+  memoryInfo <- fromMemoryInfoInt memoryInfoInt
+  networkInfo <- fromNetworkInfoInt networkInfoInt
+  placementGroupInfo <- fromPlacementGroupInfo placementGroupInfoInt
+  in
+    { instanceType: InstanceType instanceType
+    , currentGeneration
+    , freeTierEligible
+    , supportedUsageClasses
+    , supportedRootDeviceTypes
+    , supportedVirtualizationTypes
+    , bareMetal
+    , hypervisor
+    , processorInfo
+    , vCpuInfo
+    , memoryInfo
+    , instanceStorageSupported
+    , ebsInfo
+    , networkInfo
+    , placementGroupInfo
+    , hibernationSupported
+    , burstablePerformanceSupported
+    , dedicatedHostsSupported
+    , autoRecoverySupported
+    , supportedBootModes
+    }
+
+type InstanceTypesResponse =
+  { "InstanceTypes" :: List InstanceTypeDescriptionInt
+  }
+
+fromInstanceTypesResponseInt :: InstanceTypesResponse -> F (List InstanceTypeDescription)
+fromInstanceTypesResponseInt { "InstanceTypes": instanceTypes } = ado
+  types <- traverse fromInstanceTypeDescriptionInt instanceTypes
+  in types
+
+unsafeFromJust :: forall a. String -> Maybe a -> a
+unsafeFromJust _ (Just a) = a
+unsafeFromJust message Nothing = unsafeCoerce 1
+
+describeInstanceTypes :: InstanceTypeRequest -> Effect (Either MultipleErrors (List InstanceTypeDescription))
+describeInstanceTypes req = do
+  let
+    cli =
+      awsCliBase req "describe-instance-types" -- <> " --query \"InstanceTypes[?InstanceType=='m2.4xlarge']\""
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromInstanceTypesResponseInt =<< readJSON' =<< outputJson
+
 booleanToDisabledEnabled :: Boolean -> String
 booleanToDisabledEnabled true = "enabled"
 booleanToDisabledEnabled false = "disabled"
@@ -732,54 +1232,5 @@ type CmdError =
   }
 
 foreign import runCommand :: String -> Effect (Either CmdError String)
-
-------------------------------------------------------------------------------
--- GenericTaggedReadForeign
-genericTaggedReadForeign
-  :: forall a rep
-   . Generic a rep
-  => GenericTaggedReadForeign rep
-  => Foreign
-  -> Foreign.F a
-genericTaggedReadForeign f = to <$> genericTaggedReadForeignImpl f
-
-class GenericTaggedReadForeign rep where
-  genericTaggedReadForeignImpl :: Foreign -> Foreign.F rep
-
-instance genericTaggedReadForeignSum ::
-  ( GenericTaggedReadForeign a
-  , GenericTaggedReadForeign b
-  ) =>
-  GenericTaggedReadForeign (Sum a b) where
-  genericTaggedReadForeignImpl f =
-    Inl
-      <$> genericTaggedReadForeignImpl f
-      <|> Inr
-        <$> genericTaggedReadForeignImpl f
-
-instance genericTaggedReadForeignConstructor ::
-  ( GenericTaggedReadForeign a
-  , IsSymbol name
-  ) =>
-  GenericTaggedReadForeign (Constructor name a) where
-  genericTaggedReadForeignImpl f = do
-    r :: { "type" :: String, value :: Foreign } <- read' f
-    if r."type" == name then
-      withExcept (map $ ErrorAtProperty name) $ Constructor <$> genericTaggedReadForeignImpl r.value
-    else
-      Foreign.fail $ ForeignError $ "Wrong type tag " <> r."type" <> " where " <> name <> " was expected."
-    where
-    nameP = Proxy :: Proxy name
-    name = reflectSymbol nameP
-
-instance genericTaggedReadForeignArgument ::
-  ( ReadForeign a
-  ) =>
-  GenericTaggedReadForeign (Argument a) where
-  genericTaggedReadForeignImpl f = Argument <$> readImpl f
-
-instance genericTaggedReadForeignNoArgument ::
-  GenericTaggedReadForeign NoArguments where
-  genericTaggedReadForeignImpl _ = pure NoArguments
 
 foreign import base64Decode :: String -> Maybe String
