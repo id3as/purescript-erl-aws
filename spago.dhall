@@ -5,6 +5,7 @@ You can edit this file as you like.
 { name = "erl-kernel"
 , dependencies =
   [ "bifunctors"
+  , "control"
   , "convertable-options"
   , "datetime"
   , "datetime-parsing"
@@ -24,6 +25,7 @@ You can edit this file as you like.
   , "functions"
   , "identity"
   , "integers"
+  , "jsonld"
   , "lists"
   , "maybe"
   , "newtype"

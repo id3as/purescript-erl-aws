@@ -24,11 +24,12 @@ let
 
   easy-ps = import
     (nixpkgs.pkgs.fetchFromGitHub {
-      owner = "justinwoo";
+      ## Temporarily on Fabrizio's fork to get spago-next
+      owner = "f-f";
       repo = "easy-purescript-nix";
-      rev = "13ace3addf14dd9e93af9132e4799b7badfbe99e";
-      sha256 = "1gva113kyygjhn9i92vg6cyj15vhyfhq7haq51cvp4xdz4j0q4xn";
-    }) {};
+      rev = "8ec38d6e474e65b73f54ee6aa725ada171eb884e";
+      sha256 = "sha256-Z5vFKw7hWyv4W+rDkTCyfifHXtfa7E9KsvMJFoN5Ko8=";
+    }) { pkgs = nixpkgs; };
 
   nixpkgs =
     import pinnedNix {
@@ -43,19 +44,6 @@ let
       wxSupport = false;
     };
   });
-
-  pose = nixpkgs.nodePackages.purty.override {
-      name = "prettier-plugin-purescript";
-      packageName = "prettier-plugin-purescript";
-      version = "1.11.1";
-      src = builtins.fetchurl {
-        url = "https://registry.npmjs.org/@rowtype-yoga/prettier-plugin-purescript/-/prettier-plugin-purescript-1.11.1.tgz";
-      };
-      meta = {
-        description = "Hacked in Purescript Prettier Plugin";
-        license = "MIT";
-      };
-    };
 
 in
 
@@ -77,17 +65,10 @@ mkShell {
     easy-ps.spago
     easy-ps.psa
     easy-ps.purescript-language-server
+    easy-ps.purs-tidy
     purerl.purerl-0-0-14
-
-    # More formatting
-    nodePackages.prettier
-    pose
 
     # Kind of essential
     awscli2
   ];
-  shellHook =
-    '' 
-      export PRETTIER_PURESCRIPT=${pose.out}/lib/node_modules/prettier-plugin-purescript/index.js
-    '';
 }

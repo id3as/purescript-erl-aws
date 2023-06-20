@@ -2,7 +2,7 @@ let upstream =
       https://github.com/purerl/package-sets/releases/download/erl-0.14.5-20220204-2/packages.dhall sha256:bf284d597ad053b43591b964a52aa0f41ed12a576c3efde85ba999ad65072fc9
 
 in upstream
-  with simple-json.version = "86d33a1031a312cdc5247d37e167573a9e82992a"
+  with simple-json.version = "19b092b4bea82b5751169db81de53bd4addb3402"
   with simple-json.repo = "https://github.com/id3as/purescript-simple-json.git"
   with erl-simplebus.version = "1a2977d92c65b8c3c99ee2ac79420a16f609de7e"
   with erl-kernel.version = "f93533a79fa4cc04d90985b6aca18c8a84909d98"
@@ -27,4 +27,18 @@ in upstream
              , "strings"
             ]
     , version = "10c0a9aecc60a2a5e8cff35bebe45be4dacaa7f8"
+    }
+  with jsonld =
+    { repo = "ssh://git@github.com/id3as/purescript-jsonld.git"
+    , dependencies =
+      [ "control"
+      , "erl-lists"
+      , "foreign"
+      , "maybe"
+      , "newtype"
+      , "prelude"
+      , "record"
+      , "simple-json"
+      ]
+    , version = "7ed4031605d6caceadf08a365e05be78eeac3ade"
     }
