@@ -31,7 +31,7 @@ testoutput/.complete: .spago $(PS_SOURCEFILES) $(PS_ERL_FFI) $(PS_TEST_SOURCEFIL
 docs: output/.complete
 	mkdir -p docs
 	spago docs --format markdown
-	cp generated-docs/md/Erl.AWS*.md docs
+	cp generated-docs/md/Erl.Aws*.md docs
 
 .spago: spago.dhall test.dhall packages.dhall
 	spago install

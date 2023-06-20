@@ -58,7 +58,6 @@ import Erl.Data.Map as Map
 import Erl.Json (genericTaggedReadForeign, genericTaggedWriteForeign, genericEnumReadForeign, genericEnumWriteForeign)
 import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
 import Foreign (F, ForeignError(..), MultipleErrors, readString, unsafeFromForeign)
-import JsonLd as JsonLd
 import Partial.Unsafe (unsafeCrashWith)
 import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, readJSON', writeImpl, writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
@@ -109,9 +108,6 @@ derive instance Newtype Region _
 derive instance Generic Region _
 instance Show Region where
   show = genericShow
-
-instance JsonLd.JsonLdContext Region where
-  getContextValue _ = JsonLd.ContextValue "Region"
 
 newtype Profile = Profile String
 
