@@ -17,9 +17,9 @@ let
 
   purerlReleases =
     builtins.fetchGit {
-      url = "https://github.com/purerl/nixpkgs-purerl.git";
+      url = "https://github.com/id3as/nixpkgs-purerl.git";
       ref = "master";
-      rev = "0ff4c54219fe60c787334051f3303bdc8ba63e9d";
+      rev = "9fe13b1c145035808d3e9d37825362743fe42992";
     };
 
   easy-ps = import
@@ -61,12 +61,12 @@ mkShell {
     erlang.erlang-ls
 
     # Purescript
-    easy-ps.purs-0_14_5
+    easy-ps.purs-0_15_9-2
     easy-ps.spago
     easy-ps.psa
     easy-ps.purescript-language-server
     easy-ps.purs-tidy
-    purerl.purerl-0-0-14
+    purerl.purerl-0-0-19
 
     # Kind of essential
     awscli2

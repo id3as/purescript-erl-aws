@@ -28,17 +28,3 @@ in upstream
             ]
     , version = "10c0a9aecc60a2a5e8cff35bebe45be4dacaa7f8"
     }
-  with jsonld =
-    { repo = "ssh://git@github.com/id3as/purescript-jsonld.git"
-    , dependencies =
-      [ "control"
-      , "erl-lists"
-      , "foreign"
-      , "maybe"
-      , "newtype"
-      , "prelude"
-      , "record"
-      , "simple-json"
-      ]
-    , version = "7ed4031605d6caceadf08a365e05be78eeac3ade"
-    }
