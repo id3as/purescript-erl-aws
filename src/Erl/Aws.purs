@@ -743,7 +743,7 @@ type TypeOfferingInt =
   }
 
 type TypeOffering =
-  { instanceType :: String
+  { instanceType :: InstanceType
   , locationType :: String
   , location :: String
   }
@@ -760,7 +760,7 @@ fromTypeOfferingInt
   , "Location": location
   } = do
   pure $
-    { instanceType
+    { instanceType: InstanceType instanceType
     , locationType
     , location
     }
