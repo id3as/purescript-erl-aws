@@ -10,6 +10,8 @@ module Erl.Aws
   , InstanceState(..)
   , InstanceType(..)
   , KeyName(..)
+  , LaunchTemplateIdentifier(..)
+  , LaunchTemplate
   , OptInStatus(..)
   , MemoryInfo(..)
   , NetworkCard(..)
@@ -50,7 +52,7 @@ import Data.Bifunctor (bimap)
 import Data.DateTime (DateTime)
 import Data.DateTime.Parsing (parseFullDateTime, toUTC)
 import Data.Either (Either(..), note)
-import Data.Foldable (foldl)
+import Data.Foldable (foldl, intercalate)
 import Data.Generic.Rep (class Generic)
 import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -58,9 +60,9 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Debug (spy, traceM)
+import Debug (spy)
 import Effect (Effect)
-import Erl.Data.List (List)
+import Erl.Data.List (List, nil)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
@@ -70,7 +72,6 @@ import Foreign (F, ForeignError(..), MultipleErrors, readString, unsafeFromForei
 import Partial.Unsafe (unsafeCrashWith)
 import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, readJSON', writeImpl, writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
-import Unsafe.Coerce (unsafeCoerce)
 
 newtype InstanceId = InstanceId String
 
@@ -396,6 +397,7 @@ type BaseRequest a =
   { region :: Maybe Region
   , profile :: Maybe Profile
   , dryRun :: Boolean
+  , additionalCliArgs :: List String
   | a
   }
 
@@ -506,9 +508,20 @@ type MetadataOptions =
   , instanceMetadataTags :: Boolean
   }
 
+data LaunchTemplateIdentifier
+  = LaunchTemplateName String
+  | LaunchTemplateId String
+
+derive instance Eq LaunchTemplateIdentifier
+
+type LaunchTemplate =
+  { templateIdentifier :: LaunchTemplateIdentifier
+  , version :: Maybe String
+  }
+
 type RunInstancesRequest = BaseRequest
   ( clientToken :: ClientToken
-  , ebsOptimized :: Boolean
+  , ebsOptimized :: Maybe Boolean
   , imageId :: ImageId
   , instanceType :: InstanceType
   , keyName :: Maybe KeyName
@@ -519,6 +532,7 @@ type RunInstancesRequest = BaseRequest
   , securityGroups :: List SecurityGroupId
   , metadataOptions :: Maybe MetadataOptions
   , subnetId :: Maybe SubnetId
+  , template :: Maybe LaunchTemplate
   )
 
 type TagSpecificationsInt =
@@ -556,7 +570,7 @@ metadataOptionsToInt
 
 type RunInstancesRequestInt =
   { "ClientToken" :: ClientToken
-  , "EbsOptimized" :: Boolean
+  , "EbsOptimized" :: Maybe Boolean
   , "ImageId" :: ImageId
   , "InstanceType" :: InstanceType
   , "KeyName" :: Maybe KeyName
@@ -568,6 +582,7 @@ type RunInstancesRequestInt =
   , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
   , "MetadataOptions" :: Maybe InstanceMetadataOptionsRequestInt
   , "SubnetId" :: Maybe SubnetId
+  , "LaunchTemplate" :: Maybe LaunchTemplateInt
   }
 
 type RunInstancesResponse =
@@ -602,6 +617,7 @@ runInstances
     , securityGroups
     , metadataOptions
     , subnetId
+    , template
     } = do
   let
     requestInt :: RunInstancesRequestInt
@@ -619,6 +635,7 @@ runInstances
       , "MetadataOptions": metadataOptionsToInt <$> metadataOptions
       , "SecurityGroupIds": securityGroups
       , "SubnetId": subnetId
+      , "LaunchTemplate": launchTemplateToInt <$> template
       }
     requestJson = writeJSON requestInt
     cli =
@@ -626,7 +643,6 @@ runInstances
         <> " --cli-input-json '"
         <> requestJson
         <> "'"
-  traceM cli
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromRunInstancesResponseInt =<< readJSON' =<< outputJson
 
@@ -1140,9 +1156,9 @@ type InstanceTypeDescription =
   , vCpuInfo :: Maybe VCpuInfo
   , memoryInfo :: MemoryInfo
   , instanceStorageSupported :: Boolean
-  , ebsInfo :: EbsInfo
-  , networkInfo :: NetworkInfo
-  , placementGroupInfo :: PlacementGroupInfo
+  , ebsInfo :: Maybe EbsInfo
+  , networkInfo :: Maybe NetworkInfo
+  , placementGroupInfo :: Maybe PlacementGroupInfo
   , hibernationSupported :: Boolean
   , burstablePerformanceSupported :: Maybe Boolean
   , dedicatedHostsSupported :: Maybe Boolean
@@ -1153,24 +1169,24 @@ type InstanceTypeDescription =
 type InstanceTypeDescriptionInt =
   { "InstanceType" :: String
   , "CurrentGeneration" :: Maybe Boolean
-  , "FreeTierEligible" :: Boolean
-  , "SupportedUsageClasses" :: List SupportedUsageClasses
-  , "SupportedRootDeviceTypes" :: List SupportedRootDeviceTypes
-  , "SupportedVirtualizationTypes" :: List SupportedVirtualizationTypes
-  , "BareMetal" :: Boolean
+  , "FreeTierEligible" :: Maybe Boolean
+  , "SupportedUsageClasses" :: Maybe (List SupportedUsageClasses)
+  , "SupportedRootDeviceTypes" :: Maybe (List SupportedRootDeviceTypes)
+  , "SupportedVirtualizationTypes" :: Maybe (List SupportedVirtualizationTypes)
+  , "BareMetal" :: Maybe Boolean
   , "Hypervisor" :: Maybe String
   , "ProcessorInfo" :: ProcessorInfoInt
   , "VCpuInfo" :: Maybe VCpuInfoInt
   , "MemoryInfo" :: MemoryInfoInt
-  , "InstanceStorageSupported" :: Boolean
-  , "EbsInfo" :: EbsInfoInt
-  , "NetworkInfo" :: NetworkInfoInt
-  , "PlacementGroupInfo" :: PlacementGroupInfoInt
-  , "HibernationSupported" :: Boolean
+  , "InstanceStorageSupported" :: Maybe Boolean
+  , "EbsInfo" :: Maybe EbsInfoInt
+  , "NetworkInfo" :: Maybe NetworkInfoInt
+  , "PlacementGroupInfo" :: Maybe PlacementGroupInfoInt
+  , "HibernationSupported" :: Maybe Boolean
   , "BurstablePerformanceSupported" :: Maybe Boolean
   , "DedicatedHostsSupported" :: Maybe Boolean
   , "AutoRecoverySupported" :: Maybe Boolean
-  , "SupportedBootModes" :: List SupportedBootModes
+  , "SupportedBootModes" :: Maybe (List SupportedBootModes)
   }
 
 fromInstanceTypeDescriptionInt :: InstanceTypeDescriptionInt -> F InstanceTypeDescription
@@ -1198,31 +1214,31 @@ fromInstanceTypeDescriptionInt
   } = ado
   processorInfo <- fromProcessorInfoInt processorInfoInt
   vCpuInfo <- fromVCpuInfoInt vCpuInfoInt
-  ebsInfo <- fromEbsInfoInt ebsInfoInt
+  ebsInfo <- traverse fromEbsInfoInt ebsInfoInt
   memoryInfo <- fromMemoryInfoInt memoryInfoInt
-  networkInfo <- fromNetworkInfoInt networkInfoInt
-  placementGroupInfo <- fromPlacementGroupInfo placementGroupInfoInt
+  networkInfo <- traverse fromNetworkInfoInt networkInfoInt
+  placementGroupInfo <- traverse fromPlacementGroupInfo placementGroupInfoInt
   in
     { instanceType: InstanceType instanceType
     , currentGeneration
-    , freeTierEligible
-    , supportedUsageClasses
-    , supportedRootDeviceTypes
-    , supportedVirtualizationTypes
-    , bareMetal
+    , freeTierEligible: fromMaybe false freeTierEligible
+    , supportedUsageClasses: fromMaybe nil supportedUsageClasses
+    , supportedRootDeviceTypes: fromMaybe nil supportedRootDeviceTypes
+    , supportedVirtualizationTypes: fromMaybe nil supportedVirtualizationTypes
+    , bareMetal: fromMaybe false bareMetal
     , hypervisor
     , processorInfo
     , vCpuInfo
     , memoryInfo
-    , instanceStorageSupported
+    , instanceStorageSupported: fromMaybe false instanceStorageSupported
     , ebsInfo
     , networkInfo
     , placementGroupInfo
-    , hibernationSupported
+    , hibernationSupported: fromMaybe false hibernationSupported
     , burstablePerformanceSupported
     , dedicatedHostsSupported
     , autoRecoverySupported
-    , supportedBootModes
+    , supportedBootModes: fromMaybe nil supportedBootModes
     }
 
 type InstanceTypesResponse =
@@ -1234,9 +1250,23 @@ fromInstanceTypesResponseInt { "InstanceTypes": instanceTypes } = ado
   types <- traverse fromInstanceTypeDescriptionInt instanceTypes
   in types
 
-unsafeFromJust :: forall a. String -> Maybe a -> a
-unsafeFromJust _ (Just a) = a
-unsafeFromJust message Nothing = unsafeCoerce 1
+
+type LaunchTemplateInt =
+  { "LaunchTemplateId" :: Maybe String
+  , "LaunchTemplateName" :: Maybe String
+  , "Version" :: Maybe String
+  }
+
+launchTemplateToInt :: LaunchTemplate -> LaunchTemplateInt
+launchTemplateToInt {templateIdentifier,version} =
+  {"LaunchTemplateId": case templateIdentifier of
+      LaunchTemplateId val -> Just val
+      LaunchTemplateName _ -> Nothing
+  , "LaunchTemplateName": case templateIdentifier of
+      LaunchTemplateId _ -> Nothing
+      LaunchTemplateName val -> Just val
+  , "Version": version
+  }
 
 describeInstanceTypes :: InstanceTypeRequest -> Effect (Either MultipleErrors (List InstanceTypeDescription))
 describeInstanceTypes req = do
@@ -1251,13 +1281,15 @@ booleanToDisabledEnabled true = "enabled"
 booleanToDisabledEnabled false = "disabled"
 
 awsCliBase :: forall t. BaseRequest t -> String -> String
-awsCliBase { profile, region, dryRun } command = do
+awsCliBase { profile, region, dryRun, additionalCliArgs } command = do
   "aws ec2 "
     <> command
     <> " --output json --color off "
     <> (if dryRun then " --dry-run" else "")
     <> (fromMaybe "" $ (\r -> " --region " <> r) <$> unwrap <$> region)
     <> (fromMaybe "" $ (\p -> " --profile " <> p) <$> unwrap <$> profile)
+    <> " "
+    <> (intercalate " " additionalCliArgs)
 
 runAwsCli :: String -> Effect (F String)
 runAwsCli cmd = do
