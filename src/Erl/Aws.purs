@@ -43,6 +43,7 @@ module Erl.Aws
   , runInstances
   , stopInstances
   , terminateInstances
+  , describeTags
   ) where
 
 import Prelude
@@ -60,7 +61,6 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Debug (spy)
 import Effect (Effect)
 import Erl.Data.List (List, nil)
 import Erl.Data.List as List
@@ -1250,7 +1250,6 @@ fromInstanceTypesResponseInt { "InstanceTypes": instanceTypes } = ado
   types <- traverse fromInstanceTypeDescriptionInt instanceTypes
   in types
 
-
 type LaunchTemplateInt =
   { "LaunchTemplateId" :: Maybe String
   , "LaunchTemplateName" :: Maybe String
@@ -1258,8 +1257,8 @@ type LaunchTemplateInt =
   }
 
 launchTemplateToInt :: LaunchTemplate -> LaunchTemplateInt
-launchTemplateToInt {templateIdentifier,version} =
-  {"LaunchTemplateId": case templateIdentifier of
+launchTemplateToInt { templateIdentifier, version } =
+  { "LaunchTemplateId": case templateIdentifier of
       LaunchTemplateId val -> Just val
       LaunchTemplateName _ -> Nothing
   , "LaunchTemplateName": case templateIdentifier of
@@ -1275,6 +1274,36 @@ describeInstanceTypes req = do
       awsCliBase req "describe-instance-types" -- <> " --query \"InstanceTypes[?InstanceType=='m2.4xlarge']\""
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromInstanceTypesResponseInt =<< readJSON' =<< outputJson
+
+type DescribeTagsRequest = BaseRequest (instanceId :: InstanceId)
+
+type DescribeTagsRequestInt =
+  { "Filters" :: List FilterInt
+  }
+
+type DescribeTagsResponseInt =
+  { "Tags" :: List { "Key" :: String, "Value" :: String }
+  }
+
+fromDescribeTagsResponseInt :: DescribeTagsResponseInt -> Map String String
+fromDescribeTagsResponseInt { "Tags": tags } =
+  foldl (\acc { "Key": name, "Value": value } -> Map.insert name value acc) Map.empty tags
+
+describeTags :: DescribeTagsRequest -> Effect (E (Map String String))
+describeTags req@{ instanceId } = do
+  let
+    requestInt :: DescribeTagsRequestInt
+    requestInt =
+      { "Filters": List.singleton { "Name": "resource-id", "Values": List.singleton $ unwrap instanceId }
+      }
+    requestJson = writeJSON requestInt
+    cli =
+      awsCliBase req "describe-tags"
+        <> " --cli-input-json '"
+        <> requestJson
+        <> "'"
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromDescribeTagsResponseInt <$> (readJSON' =<< outputJson)
 
 booleanToDisabledEnabled :: Boolean -> String
 booleanToDisabledEnabled true = "enabled"
@@ -1293,7 +1322,7 @@ awsCliBase { profile, region, dryRun, additionalCliArgs } command = do
 
 runAwsCli :: String -> Effect (F String)
 runAwsCli cmd = do
-  res <- runCommand $ spy "CMD:" cmd
+  res <- runCommand cmd
   case res of
     Left { output } -> pure $ except $ Left $ singleton $ ForeignError $ "aws cli failure: " <> output
     Right output -> pure $ except $ Right output
