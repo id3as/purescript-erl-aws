@@ -200,6 +200,8 @@ data InstanceState
   | Stopped
 
 derive instance Eq InstanceState
+derive instance Generic InstanceState _
+instance Show InstanceState where show = genericShow
 
 instance WriteForeign InstanceState where
   writeImpl s =
