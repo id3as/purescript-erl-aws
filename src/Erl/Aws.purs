@@ -1,5 +1,6 @@
 module Erl.Aws
-  ( ClientToken(..)
+  ( BaseRequest
+  , ClientToken(..)
   , EbsInfo(..)
   , EbsOptimizedInfo(..)
   , IamRole(..)
