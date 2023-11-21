@@ -385,6 +385,7 @@ stateIntToInstanceState
   } = ado
   privateDnsName <- mandatory "PrivateDnsName" privateDnsName
   privateIpAddress <- (\addr -> except $ note (singleton $ ForeignError $ "Invalid IpAddress: addr") $ parseIpAddress addr) =<< mandatory "PrivateIpAddress" privateIpAddress
+  publicIpAddress <- (\addr -> except $ note (singleton $ ForeignError $ "Invalid IpAddress: addr") $ parseIpAddress addr) =<< mandatory "PublicIpAddress" publicIpAddress
   in Running { privateDnsName, privateIpAddress, publicDnsName: emptyStringToNothing =<< publicDnsName }
 stateIntToInstanceState { "Name": "shutting-down" } _ =
   pure ShuttingDown
