@@ -190,6 +190,7 @@ type RunningInstance =
   { publicDnsName :: Maybe Hostname
   , privateDnsName :: Hostname
   , privateIpAddress :: IpAddress
+  , publicIpAddress :: IpAddress
   }
 
 data InstanceState
