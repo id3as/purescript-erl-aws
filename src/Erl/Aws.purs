@@ -6,17 +6,17 @@ module Erl.Aws
   , IamRole(..)
   , ImageId(..)
   , InstanceDescription(..)
-  , InstanceTypeDescription(..)
   , InstanceId(..)
   , InstanceState(..)
   , InstanceType(..)
+  , InstanceTypeDescription(..)
   , KeyName(..)
-  , LaunchTemplateIdentifier(..)
   , LaunchTemplate
-  , OptInStatus(..)
+  , LaunchTemplateIdentifier(..)
   , MemoryInfo(..)
   , NetworkCard(..)
   , NetworkInfo(..)
+  , OptInStatus(..)
   , PlacementGroupInfo(..)
   , PlacementGroupStrategies(..)
   , ProcessorInfo(..)
@@ -24,6 +24,8 @@ module Erl.Aws
   , Region(..)
   , RegionDescription(..)
   , RunningInstance
+  , SecretDescription
+  , SecretId(..)
   , SecurityGroupId(..)
   , SubnetId(..)
   , SupportedArchitectures(..)
@@ -40,12 +42,15 @@ module Erl.Aws
   , describeInstanceUserData
   , describeInstances
   , describeRegions
+  , describeTags
   , describeTypeOfferings
+  , listSecrets
   , runInstances
+  , secretValue
   , stopInstances
   , terminateInstances
-  , describeTags
-  ) where
+  )
+  where
 
 import Prelude
 
@@ -62,6 +67,7 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import Effect (Effect)
 import Erl.Data.List (List, nil)
 import Erl.Data.List as List
@@ -203,7 +209,8 @@ data InstanceState
 
 derive instance Eq InstanceState
 derive instance Generic InstanceState _
-instance Show InstanceState where show = genericShow
+instance Show InstanceState where
+  show = genericShow
 
 instance WriteForeign InstanceState where
   writeImpl s =
@@ -220,6 +227,18 @@ instance WriteForeign InstanceState where
         Stopped -> "stopped"
     in
       writeImpl { state, instanceData }
+
+newtype SecretId = SecretId String
+
+derive newtype instance Eq SecretId
+derive newtype instance Ord SecretId
+derive newtype instance ReadForeign SecretId
+derive newtype instance WriteForeign SecretId
+derive newtype instance WriteForeignKey SecretId
+derive instance Newtype SecretId _
+derive instance Generic SecretId _
+instance Show SecretId where
+  show = genericShow
 
 type InstanceDescription =
   { instanceId :: InstanceId
@@ -1310,6 +1329,84 @@ describeTags req@{ instanceId } = do
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromDescribeTagsResponseInt <$> (readJSON' =<< outputJson)
 
+type ListSecretsRequest = BaseRequest ()
+
+type SecretDescription =
+  { secretId :: SecretId
+  , name :: String
+  , tags :: Map String String
+  }
+
+type SecretDescriptionInt =
+  { "ARN" :: String
+  , "Name" :: String
+  , "Tags" :: Maybe (List TagInt)
+  }
+
+fromSecretDescriptionInt :: SecretDescriptionInt -> F SecretDescription
+fromSecretDescriptionInt
+  { "ARN": secretId
+  , "Name": name
+  , "Tags": tagsInt
+  } = ado
+  in
+    { secretId: SecretId secretId
+    , name
+    , tags : tagIntsToTags $ fromMaybe List.nil tagsInt
+    }
+
+type ListSecretsResponse =
+  { "SecretList" :: List SecretDescriptionInt
+  }
+
+fromListSecretsResponseInt :: ListSecretsResponse -> F (List SecretDescription)
+fromListSecretsResponseInt { "SecretList": secrets } = ado
+  secrets <- traverse fromSecretDescriptionInt secrets
+  in secrets
+
+listSecrets :: ListSecretsRequest -> Effect (Either MultipleErrors (List SecretDescription))
+listSecrets req = do
+  let
+    cli =
+      awsCliBase' "secretsmanager" req "list-secrets"
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromListSecretsResponseInt =<< readJSON' =<< outputJson
+
+type SecretValueRequest = BaseRequest (secretId :: SecretId)
+
+type SecretValue =
+  { secretId :: SecretId
+  , name :: String
+  , secretString :: String
+  }
+
+type SecretValueInt =
+  { "ARN" :: String
+  , "Name" :: String
+  , "SecretString" :: String
+  }
+
+fromSecretValueInt :: SecretValueInt -> F SecretValue
+fromSecretValueInt
+  { "ARN": secretId
+  , "Name": name
+  , "SecretString": secretString
+  } = ado
+  in
+    { secretId: SecretId secretId
+    , name
+    , secretString
+    }
+
+secretValue :: SecretValueRequest -> Effect (Either MultipleErrors SecretValue)
+secretValue req = do
+  let
+    cli =
+      awsCliBase' "secretsmanager" req "get-secret-value"
+        <> (" --secret-id " <> unwrap (req.secretId))
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ fromSecretValueInt =<< readJSON' =<< outputJson
+
 booleanToDisabledEnabled :: Boolean -> String
 booleanToDisabledEnabled true = "enabled"
 booleanToDisabledEnabled false = "disabled"
@@ -1317,6 +1414,17 @@ booleanToDisabledEnabled false = "disabled"
 awsCliBase :: forall t. BaseRequest t -> String -> String
 awsCliBase { profile, region, dryRun, additionalCliArgs } command = do
   "aws ec2 "
+    <> command
+    <> " --output json --color off "
+    <> (if dryRun then " --dry-run" else "")
+    <> (fromMaybe "" $ (\r -> " --region " <> r) <$> unwrap <$> region)
+    <> (fromMaybe "" $ (\p -> " --profile " <> p) <$> unwrap <$> profile)
+    <> " "
+    <> (intercalate " " additionalCliArgs)
+
+awsCliBase' :: forall t. String -> BaseRequest t -> String -> String
+awsCliBase' subcommand { profile, region, dryRun, additionalCliArgs } command = do
+  ("aws  " <> subcommand <> " ")
     <> command
     <> " --output json --color off "
     <> (if dryRun then " --dry-run" else "")
