@@ -11,7 +11,7 @@ PS_TEST_ERL_FFI = $(shell find ${TEST_SRC} -type f -name \*.erl)
 
 .DEFAULT_GOAL := erl
 
-all: erl docs
+all: erl #docs
 
 ci: all test
 
