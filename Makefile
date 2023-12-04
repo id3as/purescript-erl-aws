@@ -19,29 +19,19 @@ output/.complete: .spago $(PS_SOURCEFILES) $(PS_ERL_FFI)
 	spago build
 	touch output/.complete
 
-testoutput/.complete: .spago $(PS_SOURCEFILES) $(PS_ERL_FFI) $(PS_TEST_SOURCEFILES) $(PS_TEST_ERL_FFI)
-	# Should be able to just use the below, but spago does not pass the testouput directory through to the purs backend
-	# spago -x test.dhall build --purs-args "-o testoutput"
-	# Start of workaround ------------------------------------
-	spago -x test.dhall sources | xargs purs compile -o testoutput --codegen corefn
-	purerl -o testoutput
-	# End  of workaround -------------------------------------
-	touch testoutput/.complete
-
 docs: output/.complete
 	mkdir -p docs
 	spago docs --format markdown
 	cp generated-docs/md/Erl.Aws*.md docs
 
-.spago: spago.dhall test.dhall packages.dhall
+.spago: spago.yaml
 	spago install
-	spago -x test.dhall install
 	touch .spago
 
 erl: output/.complete
 	rebar3 as dist compile
 
-test: testoutput/.complete
+test: output/.complete
 	# rebar3 as test compile
 	# erl -pa ebin -pa _build/test/lib/*/ebin -noshell -eval '(test_main@ps:main())()' -eval 'init:stop()'
 	ERL_FLAGS="-config $(PROJECT_ROOT)/test/config/sys.config" rebar3 as test eunit -m "test_main@ps" -v

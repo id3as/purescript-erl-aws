@@ -9,3 +9,4 @@ generated-docs/
 .psc-ide-port
 logs/
 .vscode/settings.json
+ebin/

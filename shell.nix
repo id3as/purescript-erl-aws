@@ -27,8 +27,8 @@ let
       ## Temporarily on Fabrizio's fork to get spago-next
       owner = "f-f";
       repo = "easy-purescript-nix";
-      rev = "8ec38d6e474e65b73f54ee6aa725ada171eb884e";
-      sha256 = "sha256-Z5vFKw7hWyv4W+rDkTCyfifHXtfa7E9KsvMJFoN5Ko8=";
+      rev = "2e62b746859e396e541bdd63dbd10b2f231027d4";
+      sha256 = "sha256-qQpWKE40wKkxb4y2+z0n4lF/OFrCsEU3Gwiugl3H+xc=";
     }) { pkgs = nixpkgs; };
 
   nixpkgs =
@@ -62,7 +62,7 @@ mkShell {
 
     # Purescript
     easy-ps.purs-0_15_9-2
-    easy-ps.spago
+    easy-ps.spago-next
     easy-ps.psa
     easy-ps.purescript-language-server
     easy-ps.purs-tidy

@@ -11,7 +11,7 @@ import Debug (spy)
 import Effect.Class (liftEffect)
 import Erl.Atom (atom)
 import Erl.Aws (describeInstanceTypes, describeTypeOfferings)
-import Erl.Data.List (List)
+import Erl.Data.List (List, nil)
 import Erl.Data.List as List
 import Erl.Kernel.Application as Application
 import Erl.Process (unsafeRunProcessM)
@@ -30,7 +30,7 @@ awsTests = do
       void $ Application.ensureAllStarted $ atom "erlexec"
       unsafeRunProcessM
         $ do
-            actual <- liftEffect $ describeTypeOfferings { region: Nothing, profile: Nothing, dryRun: false }
+            actual <- liftEffect $ describeTypeOfferings { region: Nothing, profile: Nothing, dryRun: false, additionalCliArgs: nil }
             case actual of
               Right actualList -> do
                 liftEffect $ assertTrue' "At least :shrugs: 100 type offerings" $ (length actualList) > 100
@@ -42,7 +42,7 @@ awsTests = do
       void $ Application.ensureAllStarted $ atom "erlexec"
       unsafeRunProcessM
         $ do
-            actual <- liftEffect $ describeInstanceTypes { region: Nothing, profile: Nothing, dryRun: false }
+            actual <- liftEffect $ describeInstanceTypes { region: Nothing, profile: Nothing, dryRun: false, additionalCliArgs: nil }
             case actual of
               Right actualList -> do
                 -- There were 624 today

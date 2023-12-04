@@ -1,0 +1,99 @@
+package:
+  dependencies:
+    - bifunctors
+    - control
+    - datetime
+    - datetime-parsing
+    - debug
+    - effect
+    - either
+    - erl-kernel
+    - erl-lists
+    - erl-maps
+    - foldable-traversable
+    - foreign
+    - lists
+    - maybe
+    - newtype
+    - parsing
+    - partial
+    - prelude
+    - simple-json
+    - transformers
+    - tuples
+    - typelevel-prelude
+    - unsafe-coerce
+  name: erl-aws
+  test:
+    dependencies:
+      - erl-test-eunit
+      - free
+    main: Test.Main
+workspace:
+  backend:
+    cmd: purerl
+  extra_packages:
+    erl-kernel:
+      dependencies:
+        - convertable-options
+        - datetime
+        - effect
+        - either
+        - erl-atom
+        - erl-binary
+        - erl-lists
+        - erl-maps
+        - erl-process
+        - erl-tuples
+        - erl-untagged-union
+        - foldable-traversable
+        - foreign
+        - functions
+        - integers
+        - maybe
+        - newtype
+        - partial
+        - prelude
+        - record
+        - typelevel-prelude
+        - unsafe-coerce
+      git: https://github.com/id3as/purescript-erl-kernel.git
+      ref: f93533a79fa4cc04d90985b6aca18c8a84909d98
+    erl-pinto:
+      dependencies:
+        - datetime
+        - erl-atom
+        - erl-kernel
+        - erl-lists
+        - erl-modules
+        - erl-process
+        - erl-tuples
+        - foreign
+      git: https://github.com/id3as/purescript-erl-pinto.git
+      ref: 55ded43bf38904706fae8978c230713de9c6062f
+    erl-simplebus:
+      dependencies:
+        - effect
+        - erl-process
+        - maybe
+        - newtype
+        - prelude
+      git: https://github.com/id3as/purescript-erl-simplebus.git
+      ref: 0b88c5686d6218a5619416e1550d6809b1b3670d
+    simple-json:
+      dependencies:
+        - erl-kernel
+        - erl-lists
+        - erl-maps
+        - exceptions
+        - foreign
+        - nullable
+        - prelude
+        - record
+        - typelevel-prelude
+        - variant
+      git: https://github.com/id3as/purescript-simple-json.git
+      ref: f520e292035afd9fb54d099c723870578b7b9770
+  package_set:
+    url: https://raw.githubusercontent.com/purerl/package-sets/erl-0.14.5-20220204-2/packages.json
+    hash: sha256-yH+KRRGwsKMMI5LubiQPrQQu6OxQupoTDFrEGq9AdaA=
