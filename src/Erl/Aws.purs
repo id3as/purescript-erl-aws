@@ -26,6 +26,7 @@ module Erl.Aws
   , RunningInstance
   , SecretDescription
   , SecretId(..)
+  , SecretValue(..)
   , SecurityGroupId(..)
   , SubnetId(..)
   , SupportedArchitectures(..)
