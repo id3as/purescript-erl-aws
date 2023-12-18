@@ -17,9 +17,9 @@ let
 
   purerlReleases =
     builtins.fetchGit {
-      url = "https://github.com/id3as/nixpkgs-purerl.git";
+      url = "https://github.com/purerl/nixpkgs-purerl.git";
       ref = "master";
-      rev = "9fe13b1c145035808d3e9d37825362743fe42992";
+      rev = "9812fbd38fb4e259af94eaeca2b068332e4e648c";
     };
 
   easy-ps = import
