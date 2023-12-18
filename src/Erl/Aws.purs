@@ -50,8 +50,7 @@ module Erl.Aws
   , secretValue
   , stopInstances
   , terminateInstances
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -810,7 +809,7 @@ describeTypeOfferings req = do
 
 type InstanceTypeRequest = BaseRequest ()
 
-data SupportedUsageClasses = OnDemand | Spot
+data SupportedUsageClasses = OnDemand | Spot | CapacityBlock
 
 derive instance Eq SupportedUsageClasses
 derive instance Generic SupportedUsageClasses _
@@ -819,11 +818,13 @@ instance ReadForeign SupportedUsageClasses where
     case unsafeFromForeign f of
       "on-demand" -> pure OnDemand
       "spot" -> pure Spot
-      _ -> unsafeCrashWith "Unexpected SupportedUsageClasses"
+      "capacity-block" -> pure CapacityBlock
+      err -> unsafeCrashWith ("Unexpected SupportedUsageClasses " <> err)
 
 instance WriteForeign SupportedUsageClasses where
   writeImpl OnDemand = writeImpl "on-demand"
   writeImpl Spot = writeImpl "spot"
+  writeImpl CapacityBlock = writeImpl "capacity-block"
 
 instance Show SupportedUsageClasses where
   show = genericShow
@@ -1352,7 +1353,7 @@ fromSecretDescriptionInt
   in
     { secretId: SecretId secretId
     , name
-    , tags : tagIntsToTags $ fromMaybe List.nil tagsInt
+    , tags: tagIntsToTags $ fromMaybe List.nil tagsInt
     }
 
 type ListSecretsResponse =
