@@ -6,6 +6,7 @@
 
 runCommand(Cmd) ->
     fun() ->
+            % file:write_file("/tmp/aws.log", io_lib:format("~p~n", [Cmd]), [append]),
             case exec:run(binary_to_list(Cmd), [stdout, {stderr, stdout}, sync]) of
                 {ok, Output} ->
                     Stdout = get_value(stdout, <<"">>, Output),

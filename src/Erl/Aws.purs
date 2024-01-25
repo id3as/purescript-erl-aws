@@ -1,8 +1,10 @@
 module Erl.Aws
   ( BaseRequest
   , ClientToken(..)
+  , EbsDevice
   , EbsInfo(..)
   , EbsOptimizedInfo(..)
+  , EbsType(..)
   , IamRole(..)
   , ImageId(..)
   , InstanceDescription(..)
@@ -69,7 +71,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Debug (spy)
 import Effect (Effect)
-import Erl.Data.List (List, nil)
+import Erl.Data.List (List, nil, (:))
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
@@ -77,7 +79,7 @@ import Erl.Json (genericTaggedReadForeign, genericTaggedWriteForeign, genericEnu
 import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
 import Foreign (F, ForeignError(..), MultipleErrors, readString, unsafeFromForeign)
 import Partial.Unsafe (unsafeCrashWith)
-import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, readJSON', writeImpl, writeJSON)
+import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, readJSON', write, writeImpl, writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
 
 newtype InstanceId = InstanceId String
@@ -552,10 +554,10 @@ type RunInstancesRequest = BaseRequest
   , userData :: String
   , tags :: Map String String
   , iamRole :: Maybe IamRole
-  , securityGroups :: List SecurityGroupId
   , metadataOptions :: Maybe MetadataOptions
-  , subnetId :: Maybe SubnetId
   , template :: Maybe LaunchTemplate
+  , networkInterfaces :: List NetworkInterface
+  , blockDevices :: List EbsDevice
   )
 
 type TagSpecificationsInt =
@@ -591,6 +593,88 @@ metadataOptionsToInt
   , "InstanceMetadataTags": booleanToDisabledEnabled instanceMetadataTags
   }
 
+type PrivateIpAddressInt =
+  { "Primary" :: Boolean
+  , "PrivateIpAddress" :: String
+  }
+
+type NetworkInterfaceInt =
+  { "AssociatePublicIpAddress" :: Boolean
+  , "DeleteOnTermination" :: Boolean
+  , "Description" :: Maybe String
+  , "DeviceIndex" :: Int
+  , "Groups" :: List SecurityGroupId
+  , "SubnetId" :: Maybe SubnetId
+  , "NetworkCardIndex" :: Int
+  }
+
+type NetworkInterface =
+  { associatePublicIpAddress :: Boolean
+  , deleteOnTermination :: Boolean
+  , description :: Maybe String
+  , deviceIndex :: Int
+  , groups :: List SecurityGroupId
+  , subnetId :: Maybe SubnetId
+  , networkCardIndex :: Int
+  }
+
+data EbsType = Standard | St1 | Sc1 | Gp2 | Gp3 | Io1 | Io2
+
+derive instance Generic EbsType _
+instance ReadForeign EbsType where
+  readImpl f =
+    case unsafeFromForeign f of
+      "standard" -> pure Standard
+      "st1" -> pure St1
+      "sc1" -> pure Sc1
+      "gp2" -> pure Gp2
+      "gp3" -> pure Gp3
+      "io1" -> pure Io1
+      "io2" -> pure Io2
+      somethingElse -> unsafeCrashWith $ "Unknown ebs volue type " <> somethingElse
+
+instance WriteForeign EbsType where
+  writeImpl f =
+    case f of
+      Standard -> write "standard"
+      St1 -> write "st1"
+      Sc1 -> write "sc1"
+      Gp2 -> write "gp2"
+      Gp3 -> write "gp3"
+      Io1 -> write "io1"
+      Io2 -> write "io2"
+
+type EbsDevice =
+  { deviceName :: String
+  , volumeType :: EbsType
+  , volumeSize :: Maybe Int
+  , deleteOnTermination :: Boolean
+  , iops :: Maybe Int
+  }
+
+type EbsDeviceInt =
+  { "DeleteOnTermination" :: Boolean
+  , "VolumeSize" :: Int
+  , "VolumeType" :: EbsType
+  , "Iops" :: Maybe Int
+  }
+
+type BlockDeviceInt =
+  { "DeviceName" :: String
+  , "Ebs" :: EbsDeviceInt
+  }
+
+blockDeviceToInt :: EbsDevice -> BlockDeviceInt
+blockDeviceToInt { deviceName, deleteOnTermination, volumeSize, volumeType, iops } =
+  { "DeviceName": deviceName
+  , "Ebs":
+      { "DeleteOnTermination": deleteOnTermination
+      , "VolumeSize": fromMaybe 8 volumeSize
+      , "VolumeType": volumeType
+      , "Iops": iops
+      }
+  }
+
 type RunInstancesRequestInt =
   { "ClientToken" :: ClientToken
   , "EbsOptimized" :: Maybe Boolean
@@ -601,11 +685,11 @@ type RunInstancesRequestInt =
   , "MaxCount" :: Int
   , "UserData" :: String
   , "TagSpecifications" :: List TagSpecificationsInt
-  , "SecurityGroupIds" :: List SecurityGroupId
   , "IamInstanceProfile" :: Maybe IamInstanceProfileSpecificationInt
   , "MetadataOptions" :: Maybe InstanceMetadataOptionsRequestInt
-  , "SubnetId" :: Maybe SubnetId
   , "LaunchTemplate" :: Maybe LaunchTemplateInt
+  , "NetworkInterfaces" :: List NetworkInterfaceInt
+  , "BlockDeviceMappings" :: List BlockDeviceInt
   }
 
 type RunInstancesResponse =
@@ -637,10 +721,10 @@ runInstances
     , userData
     , tags
     , iamRole
-    , securityGroups
     , metadataOptions
-    , subnetId
     , template
+    , networkInterfaces
+    , blockDevices
     } = do
   let
     requestInt :: RunInstancesRequestInt
@@ -656,9 +740,9 @@ runInstances
       , "TagSpecifications": List.singleton { "ResourceType": "instance", "Tags": tagsToTagInts tags }
       , "IamInstanceProfile": iamProfileToInt <$> iamRole
       , "MetadataOptions": metadataOptionsToInt <$> metadataOptions
-      , "SecurityGroupIds": securityGroups
-      , "SubnetId": subnetId
       , "LaunchTemplate": launchTemplateToInt <$> template
+      , "NetworkInterfaces": map networkInterfaceToInt networkInterfaces
+      , "BlockDeviceMappings": map blockDeviceToInt blockDevices
       }
     requestJson = writeJSON requestInt
     cli =
@@ -1290,6 +1374,25 @@ launchTemplateToInt { templateIdentifier, version } =
       LaunchTemplateId _ -> Nothing
       LaunchTemplateName val -> Just val
   , "Version": version
+  }
+
+networkInterfaceToInt :: NetworkInterface -> NetworkInterfaceInt
+networkInterfaceToInt
+  { associatePublicIpAddress
+  , deleteOnTermination
+  , description
+  , deviceIndex
+  , groups
+  , subnetId
+  , networkCardIndex
+  } =
+  { "AssociatePublicIpAddress": associatePublicIpAddress
+  , "DeleteOnTermination": deleteOnTermination
+  , "Description": description
+  , "DeviceIndex": deviceIndex
+  , "Groups": groups
+  , "SubnetId": subnetId
+  , "NetworkCardIndex": networkCardIndex
   }
 
 describeInstanceTypes :: InstanceTypeRequest -> Effect (Either MultipleErrors (List InstanceTypeDescription))
