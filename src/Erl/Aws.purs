@@ -69,9 +69,8 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Debug (spy)
 import Effect (Effect)
-import Erl.Data.List (List, nil, (:))
+import Erl.Data.List (List, nil)
 import Erl.Data.List as List
 import Erl.Data.Map (Map)
 import Erl.Data.Map as Map
@@ -198,7 +197,7 @@ type RunningInstance =
   { publicDnsName :: Maybe Hostname
   , privateDnsName :: Hostname
   , privateIpAddress :: IpAddress
-  --, publicIpAddress :: IpAddress
+  , publicIpAddress :: Maybe IpAddress
   }
 
 data InstanceState
@@ -323,6 +322,7 @@ type InstanceDescriptionInt =
   , "PrivateDnsName" :: Maybe String
   , "PrivateIpAddress" :: Maybe String
   , "PublicDnsName" :: Maybe String
+  , "PublicIpAddress" :: Maybe String
   , "State" :: StateInt
   , "ClientToken" :: String
   , "UserData" :: Maybe String
@@ -403,10 +403,19 @@ stateIntToInstanceState
   { "PrivateDnsName": privateDnsName
   , "PrivateIpAddress": privateIpAddress
   , "PublicDnsName": publicDnsName
+  , "PublicIpAddress": publicIpAddress
   } = ado
   privateDnsName <- mandatory "PrivateDnsName" privateDnsName
   privateIpAddress <- (\addr -> except $ note (singleton $ ForeignError $ "Invalid IpAddress: addr") $ parseIpAddress addr) =<< mandatory "PrivateIpAddress" privateIpAddress
-  in Running { privateDnsName, privateIpAddress, publicDnsName: emptyStringToNothing =<< publicDnsName }
+  in Running { privateDnsName
+             , privateIpAddress
+             , publicDnsName: emptyStringToNothing =<< publicDnsName
+             , publicIpAddress: parsePublicIpAddress publicIpAddress
+             }
+  where
+  parsePublicIpAddress :: Maybe String -> Maybe IpAddress
+  parsePublicIpAddress (Just addr) = parseIpAddress addr
+  parsePublicIpAddress Nothing = Nothing
 stateIntToInstanceState { "Name": "shutting-down" } _ =
   pure ShuttingDown
 stateIntToInstanceState { "Name": "terminated" } _ =
@@ -489,7 +498,7 @@ describeInstanceUserData req@{ instanceId } = do
     parsed = readJSON' =<< outputJson
 
     userData :: F (Maybe UserData)
-    userData = (\{ "UserData": { "Value": userData } } -> (map UserData <<< emptyStringToNothing) =<< base64Decode =<< userData) <$> parsed
+    userData = (\{ "UserData": { "Value": _userData } } -> (map UserData <<< emptyStringToNothing) =<< base64Decode =<< _userData) <$> parsed
   pure $ runExcept $ userData
 
 describeRegions :: BaseRequest () -> Effect (Either MultipleErrors (List RegionDescription))
