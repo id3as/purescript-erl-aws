@@ -78,7 +78,7 @@ import Erl.Json (genericTaggedReadForeign, genericTaggedWriteForeign, genericEnu
 import Erl.Kernel.Inet (Hostname, IpAddress, parseIpAddress)
 import Foreign (F, ForeignError(..), MultipleErrors, readString, unsafeFromForeign)
 import Partial.Unsafe (unsafeCrashWith)
-import Simple.JSON (class ReadForeign, class WriteForeign, class WriteForeignKey, E, readJSON', write, writeImpl, writeJSON)
+import Simple.JSON (class ReadForeign, class ReadForeignKey, class WriteForeign, class WriteForeignKey, E, readJSON', write, writeImpl, writeJSON)
 import Text.Parsing.Parser (ParserT, fail, parseErrorMessage, runParser)
 
 newtype InstanceId = InstanceId String
@@ -120,6 +120,7 @@ newtype Region = Region String
 derive newtype instance Eq Region
 derive newtype instance Ord Region
 derive newtype instance ReadForeign Region
+derive newtype instance ReadForeignKey Region
 derive newtype instance WriteForeign Region
 derive newtype instance WriteForeignKey Region
 derive instance Newtype Region _
