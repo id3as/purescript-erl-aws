@@ -554,6 +554,15 @@ type LaunchTemplate =
   , version :: Maybe String
   }
 
+-- Spot / market launch options for run-instances. v1 is spot-only:
+-- marketType "spot" uses AWS defaults (one-time request, terminate on
+-- interruption). Mirrors the run-instances InstanceMarketOptions input.
+-- NOTE (norsk): added locally to support spot tiers — needs upstreaming
+-- to id3as/purescript-erl-aws and real-AWS validation.
+type InstanceMarketOptions =
+  { marketType :: String
+  }
+
 type RunInstancesRequest = BaseRequest
   ( clientToken :: ClientToken
   , ebsOptimized :: Maybe Boolean
@@ -568,6 +577,7 @@ type RunInstancesRequest = BaseRequest
   , template :: Maybe LaunchTemplate
   , networkInterfaces :: List NetworkInterface
   , blockDevices :: List EbsDevice
+  , instanceMarketOptions :: Maybe InstanceMarketOptions
   )
 
 type TagSpecificationsInt =
@@ -685,6 +695,10 @@ blockDeviceToInt { deviceName, deleteOnTermination, volumeSize, volumeType, iops
       }
   }
 
+type InstanceMarketOptionsInt =
+  { "MarketType" :: String
+  }
+
 type RunInstancesRequestInt =
   { "ClientToken" :: ClientToken
   , "EbsOptimized" :: Maybe Boolean
@@ -700,6 +714,7 @@ type RunInstancesRequestInt =
   , "LaunchTemplate" :: Maybe LaunchTemplateInt
   , "NetworkInterfaces" :: List NetworkInterfaceInt
   , "BlockDeviceMappings" :: List BlockDeviceInt
+  , "InstanceMarketOptions" :: Maybe InstanceMarketOptionsInt
   }
 
 type RunInstancesResponse =
@@ -735,6 +750,7 @@ runInstances
     , template
     , networkInterfaces
     , blockDevices
+    , instanceMarketOptions
     } = do
   let
     requestInt :: RunInstancesRequestInt
@@ -753,6 +769,7 @@ runInstances
       , "LaunchTemplate": launchTemplateToInt <$> template
       , "NetworkInterfaces": map networkInterfaceToInt networkInterfaces
       , "BlockDeviceMappings": map blockDeviceToInt blockDevices
+      , "InstanceMarketOptions": (\o -> { "MarketType": o.marketType }) <$> instanceMarketOptions
       }
     requestJson = writeJSON requestInt
     cli =
