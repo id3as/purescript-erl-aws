@@ -52,6 +52,15 @@ module Erl.Aws
   , secretValue
   , stopInstances
   , terminateInstances
+  , DescribeSecurityGroupsRequest
+  , SecurityGroupDescription
+  , describeSecurityGroups
+  , NetworkInterfaceId(..)
+  , DescribeNetworkInterfacesRequest
+  , NetworkInterfaceDescription
+  , describeNetworkInterfaces
+  , ModifyNetworkInterfaceGroupsRequest
+  , modifyNetworkInterfaceGroups
   ) where
 
 import Prelude
@@ -148,6 +157,17 @@ derive newtype instance WriteForeign SecurityGroupId
 derive instance Newtype SecurityGroupId _
 derive instance Generic SecurityGroupId _
 instance Show SecurityGroupId where
+  show = genericShow
+
+newtype NetworkInterfaceId = NetworkInterfaceId String
+
+derive newtype instance Eq NetworkInterfaceId
+derive newtype instance Ord NetworkInterfaceId
+derive newtype instance ReadForeign NetworkInterfaceId
+derive newtype instance WriteForeign NetworkInterfaceId
+derive instance Newtype NetworkInterfaceId _
+derive instance Generic NetworkInterfaceId _
+instance Show NetworkInterfaceId where
   show = genericShow
 
 newtype SubnetId = SubnetId String
@@ -1459,6 +1479,132 @@ describeTags req@{ instanceId } = do
         <> "'"
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromDescribeTagsResponseInt <$> (readJSON' =<< outputJson)
+
+-- Security groups ------------------------------------------------------
+
+type DescribeSecurityGroupsRequest = BaseRequest
+  ( filters :: List { name :: String, values :: List String }
+  )
+
+type SecurityGroupDescription =
+  { securityGroupId :: SecurityGroupId
+  , groupName :: String
+  , description :: String
+  , vpcId :: Maybe String
+  , tags :: Map String String
+  }
+
+type SecurityGroupDescriptionInt =
+  { "GroupId" :: String
+  , "GroupName" :: String
+  , "Description" :: String
+  , "VpcId" :: Maybe String
+  , "Tags" :: Maybe (List TagInt)
+  }
+
+type DescribeSecurityGroupsResponseInt =
+  { "SecurityGroups" :: List SecurityGroupDescriptionInt
+  }
+
+fromSecurityGroupDescriptionInt :: SecurityGroupDescriptionInt -> SecurityGroupDescription
+fromSecurityGroupDescriptionInt
+  { "GroupId": groupId
+  , "GroupName": groupName
+  , "Description": description
+  , "VpcId": vpcId
+  , "Tags": tags
+  } =
+  { securityGroupId: SecurityGroupId groupId
+  , groupName
+  , description
+  , vpcId
+  , tags: tagIntsToTags $ fromMaybe List.nil tags
+  }
+
+describeSecurityGroups :: DescribeSecurityGroupsRequest -> Effect (E (List SecurityGroupDescription))
+describeSecurityGroups req@{ filters } = do
+  let
+    requestInt :: { "Filters" :: List FilterInt }
+    requestInt =
+      { "Filters": (\{ name, values } -> { "Name": name, "Values": values }) <$> filters
+      }
+    requestJson = writeJSON requestInt
+    cli =
+      awsCliBase req "describe-security-groups"
+        <> " --cli-input-json '"
+        <> requestJson
+        <> "'"
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ (map fromSecurityGroupDescriptionInt) <$> (_."SecurityGroups") <$>
+    ((readJSON' =<< outputJson) :: F DescribeSecurityGroupsResponseInt)
+
+-- Network interfaces ---------------------------------------------------
+
+type DescribeNetworkInterfacesRequest = BaseRequest
+  ( instanceId :: InstanceId
+  )
+
+type NetworkInterfaceDescription =
+  { networkInterfaceId :: NetworkInterfaceId
+  , groups :: List SecurityGroupId
+  }
+
+type NetworkInterfaceDescriptionInt =
+  { "NetworkInterfaceId" :: String
+  , "Groups" :: List { "GroupId" :: String }
+  }
+
+type DescribeNetworkInterfacesResponseInt =
+  { "NetworkInterfaces" :: List NetworkInterfaceDescriptionInt
+  }
+
+fromNetworkInterfaceDescriptionInt :: NetworkInterfaceDescriptionInt -> NetworkInterfaceDescription
+fromNetworkInterfaceDescriptionInt { "NetworkInterfaceId": eni, "Groups": groups } =
+  { networkInterfaceId: NetworkInterfaceId eni
+  , groups: (\{ "GroupId": g } -> SecurityGroupId g) <$> groups
+  }
+
+describeNetworkInterfaces :: DescribeNetworkInterfacesRequest -> Effect (E (List NetworkInterfaceDescription))
+describeNetworkInterfaces req@{ instanceId } = do
+  let
+    requestInt :: { "Filters" :: List FilterInt }
+    requestInt =
+      { "Filters": List.singleton { "Name": "attachment.instance-id", "Values": List.singleton $ unwrap instanceId }
+      }
+    requestJson = writeJSON requestInt
+    cli =
+      awsCliBase req "describe-network-interfaces"
+        <> " --cli-input-json '"
+        <> requestJson
+        <> "'"
+  outputJson <- runAwsCli cli
+  pure $ runExcept $ (map fromNetworkInterfaceDescriptionInt) <$> (_."NetworkInterfaces") <$>
+    ((readJSON' =<< outputJson) :: F DescribeNetworkInterfacesResponseInt)
+
+-- Replaces the ENI's security-group set wholesale (the EC2 semantics of
+-- modify-network-interface-attribute --groups).
+
+type ModifyNetworkInterfaceGroupsRequest = BaseRequest
+  ( networkInterfaceId :: NetworkInterfaceId
+  , groups :: List SecurityGroupId
+  )
+
+modifyNetworkInterfaceGroups :: ModifyNetworkInterfaceGroupsRequest -> Effect (E Unit)
+modifyNetworkInterfaceGroups req@{ networkInterfaceId, groups } = do
+  let
+    requestInt :: { "NetworkInterfaceId" :: String, "Groups" :: List String }
+    requestInt =
+      { "NetworkInterfaceId": unwrap networkInterfaceId
+      , "Groups": unwrap <$> groups
+      }
+    requestJson = writeJSON requestInt
+    cli =
+      awsCliBase req "modify-network-interface-attribute"
+        <> " --cli-input-json '"
+        <> requestJson
+        <> "'"
+  output <- runAwsCli cli
+  pure $ runExcept $ (const unit) <$> output
 
 type ListSecretsRequest = BaseRequest ()
 
