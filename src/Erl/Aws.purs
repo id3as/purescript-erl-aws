@@ -54,6 +54,7 @@ module Erl.Aws
   , terminateInstances
   , DescribeSecurityGroupsRequest
   , SecurityGroupDescription
+  , IpPermission
   , describeSecurityGroups
   , NetworkInterfaceId(..)
   , DescribeNetworkInterfacesRequest
@@ -1486,12 +1487,34 @@ type DescribeSecurityGroupsRequest = BaseRequest
   ( filters :: List { name :: String, values :: List String }
   )
 
+-- One ingress permission entry. fromPort/toPort are absent when the
+-- protocol is "-1" (all traffic); protocol is "tcp" | "udp" | "icmp" | "-1".
+type IpPermission =
+  { ipProtocol :: String
+  , fromPort :: Maybe Int
+  , toPort :: Maybe Int
+  , ipRanges :: List { cidrIp :: String, description :: Maybe String }
+  }
+
 type SecurityGroupDescription =
   { securityGroupId :: SecurityGroupId
   , groupName :: String
   , description :: String
   , vpcId :: Maybe String
   , tags :: Map String String
+  , ipPermissions :: List IpPermission
+  }
+
+type IpRangeInt =
+  { "CidrIp" :: String
+  , "Description" :: Maybe String
+  }
+
+type IpPermissionInt =
+  { "IpProtocol" :: String
+  , "FromPort" :: Maybe Int
+  , "ToPort" :: Maybe Int
+  , "IpRanges" :: Maybe (List IpRangeInt)
   }
 
 type SecurityGroupDescriptionInt =
@@ -1500,10 +1523,24 @@ type SecurityGroupDescriptionInt =
   , "Description" :: String
   , "VpcId" :: Maybe String
   , "Tags" :: Maybe (List TagInt)
+  , "IpPermissions" :: Maybe (List IpPermissionInt)
   }
 
 type DescribeSecurityGroupsResponseInt =
   { "SecurityGroups" :: List SecurityGroupDescriptionInt
+  }
+
+fromIpPermissionInt :: IpPermissionInt -> IpPermission
+fromIpPermissionInt
+  { "IpProtocol": ipProtocol
+  , "FromPort": fromPort
+  , "ToPort": toPort
+  , "IpRanges": ipRanges
+  } =
+  { ipProtocol
+  , fromPort
+  , toPort
+  , ipRanges: (\{ "CidrIp": cidrIp, "Description": rangeDescription } -> { cidrIp, description: rangeDescription }) <$> fromMaybe List.nil ipRanges
   }
 
 fromSecurityGroupDescriptionInt :: SecurityGroupDescriptionInt -> SecurityGroupDescription
@@ -1513,12 +1550,14 @@ fromSecurityGroupDescriptionInt
   , "Description": description
   , "VpcId": vpcId
   , "Tags": tags
+  , "IpPermissions": ipPermissions
   } =
   { securityGroupId: SecurityGroupId groupId
   , groupName
   , description
   , vpcId
   , tags: tagIntsToTags $ fromMaybe List.nil tags
+  , ipPermissions: fromIpPermissionInt <$> fromMaybe List.nil ipPermissions
   }
 
 describeSecurityGroups :: DescribeSecurityGroupsRequest -> Effect (E (List SecurityGroupDescription))
