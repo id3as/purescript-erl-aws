@@ -662,6 +662,7 @@ type NetworkInterface =
 data EbsType = Standard | St1 | Sc1 | Gp2 | Gp3 | Io1 | Io2
 
 derive instance Generic EbsType _
+derive instance Eq EbsType
 instance ReadForeign EbsType where
   readImpl f =
     case unsafeFromForeign f of
