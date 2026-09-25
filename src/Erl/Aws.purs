@@ -41,6 +41,8 @@ module Erl.Aws
   , VCpuInfo(..)
   , createTags
   , defaultMetadataOptions
+  , ImageDescription
+  , describeImages
   , describeInstanceTypes
   , describeInstanceUserData
   , describeInstances
@@ -487,6 +489,37 @@ describeInstances req@{ instanceIds } = do
         <> "'"
   outputJson <- runAwsCli cli
   pure $ runExcept $ fromDescribeInstancesInt =<< readJSON' =<< outputJson
+
+-- | What a launch needs to know about an AMI: the device name its root
+-- | volume is mapped at (`/dev/sda1` on Ubuntu/Rocky, `/dev/xvda` on
+-- | Amazon Linux 2023), which a block-device mapping for the root must use.
+type ImageDescription =
+  { imageId :: ImageId
+  , rootDeviceName :: Maybe String
+  }
+
+type DescribeImagesRequest = BaseRequest (imageIds :: List ImageId)
+
+type DescribeImagesRequestInt = { "ImageIds" :: List ImageId }
+
+type DescribeImagesResponseInt =
+  { "Images" :: List { "ImageId" :: ImageId, "RootDeviceName" :: Maybe String }
+  }
+
+describeImages :: DescribeImagesRequest -> Effect (Either MultipleErrors (List ImageDescription))
+describeImages req@{ imageIds } = do
+  let
+    requestInt :: DescribeImagesRequestInt
+    requestInt = { "ImageIds": imageIds }
+    cli =
+      awsCliBase req "describe-images"
+        <> " --cli-input-json '"
+        <> writeJSON requestInt
+        <> "'"
+  outputJson <- runAwsCli cli
+  pure $ runExcept do
+    resp :: DescribeImagesResponseInt <- readJSON' =<< outputJson
+    pure $ (\i -> { imageId: i."ImageId", rootDeviceName: i."RootDeviceName" }) <$> resp."Images"
 
 type DescribeInstanceUserDataRequest = BaseRequest (instanceId :: InstanceId)
 
