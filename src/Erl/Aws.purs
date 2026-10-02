@@ -50,6 +50,11 @@ module Erl.Aws
   , describeTags
   , describeTypeOfferings
   , listSecrets
+  , Route53ChangeRecordRequest
+  , Route53ListRecordsRequest
+  , ResourceRecordSet
+  , route53ChangeResourceRecordSets
+  , route53ListResourceRecordSets
   , runInstances
   , secretValue
   , stopInstances
@@ -1760,6 +1765,91 @@ secretValue req = do
 booleanToDisabledEnabled :: Boolean -> String
 booleanToDisabledEnabled true = "enabled"
 booleanToDisabledEnabled false = "disabled"
+
+-- Route 53 -----------------------------------------------------------------
+
+-- | One record change (UPSERT or DELETE) in a hosted zone: the CLI's
+-- | change-resource-record-sets with a single-change batch. A DELETE must
+-- | name exactly the record as it is (type, TTL, values), as Route 53 requires.
+type Route53ChangeRecordRequest = BaseRequest
+  ( hostedZoneId :: String
+  , action :: String
+  , name :: String
+  , recordType :: String
+  , ttl :: Int
+  , values :: List String
+  )
+
+type Route53ChangeBatchInt =
+  { "Changes" ::
+      List
+        { "Action" :: String
+        , "ResourceRecordSet" ::
+            { "Name" :: String
+            , "Type" :: String
+            , "TTL" :: Int
+            , "ResourceRecords" :: List { "Value" :: String }
+            }
+        }
+  }
+
+route53ChangeResourceRecordSets :: Route53ChangeRecordRequest -> Effect (Either MultipleErrors Unit)
+route53ChangeResourceRecordSets req@{ hostedZoneId, action, name, recordType, ttl, values } = do
+  let
+    batch :: Route53ChangeBatchInt
+    batch =
+      { "Changes":
+          List.singleton
+            { "Action": action
+            , "ResourceRecordSet":
+                { "Name": name
+                , "Type": recordType
+                , "TTL": ttl
+                , "ResourceRecords": (\v -> { "Value": v }) <$> values
+                }
+            }
+      }
+    cli =
+      awsCliBase' "route53" req "change-resource-record-sets"
+        <> " --hosted-zone-id "
+        <> hostedZoneId
+        <> " --change-batch '"
+        <> writeJSON batch
+        <> "'"
+  output <- runAwsCli cli
+  pure $ runExcept $ const unit <$> output
+
+type Route53ListRecordsRequest = BaseRequest
+  ( hostedZoneId :: String
+  )
+
+-- | A record set as the zone holds it; alias records have no values.
+type ResourceRecordSet =
+  { name :: String
+  , recordType :: String
+  , values :: List String
+  }
+
+type Route53ListRecordsResponseInt =
+  { "ResourceRecordSets" ::
+      List
+        { "Name" :: String
+        , "Type" :: String
+        , "ResourceRecords" :: Maybe (List { "Value" :: String })
+        }
+  }
+
+-- | Every record set in a hosted zone (the CLI pages through them).
+route53ListResourceRecordSets :: Route53ListRecordsRequest -> Effect (Either MultipleErrors (List ResourceRecordSet))
+route53ListResourceRecordSets req@{ hostedZoneId } = do
+  let
+    cli = awsCliBase' "route53" req "list-resource-record-sets" <> " --hosted-zone-id " <> hostedZoneId
+  outputJson <- runAwsCli cli
+  let
+    response :: F Route53ListRecordsResponseInt
+    response = readJSON' =<< outputJson
+    toRecord r = { name: r."Name", recordType: r."Type", values: fromMaybe nil $ map _."Value" <$> r."ResourceRecords" }
+  pure $ runExcept $ (map toRecord) <$> _."ResourceRecordSets" <$> response
 
 awsCliBase :: forall t. BaseRequest t -> String -> String
 awsCliBase { profile, region, dryRun, additionalCliArgs } command = do
